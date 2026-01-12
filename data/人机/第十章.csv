@@ -1,0 +1,11 @@
+id,type,gender,word,cn,forms,example,source
+1001,填空,,解的质量; 计算时间,实时搜索 (Real-Time Search) 的核心约束：在有限的时间内做出决策，需要在____与____之间进行权衡。,完整：解的质量; 计算时间,Chapter10_SearchAdv,Anki
+1002,填空,,局部搜索; 决策依据; 次优记忆,RTA* (Real-Time A*) 与传统 A* 的区别：1. ____：RTA* 每次仅向前搜索有限深度。; 2. ____：根据 $f(n)=g(n)+h(n)$ 选择局部最优邻居。; 3. ____：记录当前节点的“次优 $f$ 值”以避免死循环。,完整：1. 局部搜索... 2. 决策依据... 3. 次优记忆...,Chapter10_SearchAdv,Anki
+1003,填空,,爬山法 (Hill Climbing),局部搜索算法中，贪婪地选择最佳后继节点，不维护搜索树的算法是____。,完整：爬山法 (Hill Climbing),Chapter10_SearchAdv,Anki
+1004,填空,,局部最大值; 高原 (Plateau); 山脊 (Ridge),爬山法容易陷入的三个困境：1. ____; 2. ____; 3. ____。,完整：1. 局部最大值... 2. 高原... 3. 山脊...,Chapter10_SearchAdv,Anki
+1005,填空,,模拟退火 (Simulated Annealing); 玻尔兹曼分布,允许以一定概率接受“更差”状态以跳出局部最优的算法是____；其概率由____决定。,完整：模拟退火... 玻尔兹曼分布,Chapter10_SearchAdv,Anki
+1006,填空,,遗传算法 (Genetic Algorithm); 选择; 交叉; 变异,模拟生物进化过程的随机搜索算法是____；其核心操作包括____、____和____。,完整：遗传算法... 选择; 交叉; 变异,Chapter10_SearchAdv,Anki
+1007,填空,,约束满足问题 (CSP),由变量集合 X、值域集合 D 和约束集合 C 组成的搜索问题称为____。,完整：约束满足问题 (CSP),Chapter10_SearchAdv,Anki
+1008,填空,,回溯搜索 (Backtracking Search),解决 CSP 问题的基本搜索算法是____（一种深度优先搜索）。,完整：回溯搜索 (Backtracking Search),Chapter10_SearchAdv,Anki
+1009,填空,,前向检验 (Forward Checking); 弧一致性 (Arc Consistency),CSP 搜索中的两种常用剪枝/推理技术：1. ____：变量赋值后，删除未赋值邻居中不可用的值。; 2. ____：在搜索前或搜索中确保每条边的约束都满足。,完整：1. 前向检验... 2. 弧一致性...,Chapter10_SearchAdv,Anki
+1010,填空,,最少剩余值 (MRV); 度启发式 (Degree Heuristic),CSP 变量选择的两种启发式策略：1. ____：优先选择剩余合法值最少的变量（“最难满足”）。; 2. ____：优先选择与其他未赋值变量约束最多的变量。,完整：1. 最少剩余值... 2. 度启发式...,Chapter10_SearchAdv,Anki

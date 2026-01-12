@@ -1,0 +1,11 @@
+id,type,gender,word,cn,forms,example,source
+801,填空,,估计的困难（偏差）; 估计的方差,评估学习算法精度时面临的两个关键困难：1. ____：如何使用有限的数据得出对未来数据的准确估计。; 2. ____：即使是无偏估计，不同的测试集也可能导致不同的结果。,完整：1. 估计的困难... 2. 估计的方差...,Chapter8_Eval,Anki
+802,填空,,$error_S(h)$; $error_D(h)$,样本错误率与真实错误率：1. 样本错误率 ____：假设 h 在样本集合 S 上错误分类的样本比例。; 2. 真实错误率 ____：假设 h 在整个实例分布 D 上错误分类的概率。,完整：1. 样本错误率... 2. 真实错误率...,Chapter8_Eval,Anki
+803,填空,,二项分布 (Binomial Distribution),在样本量固定且样本独立同分布的假设下，样本错误率 $r$ 服从____。,完整：二项分布 (Binomial Distribution),Chapter8_Eval,Anki
+804,填空,,正态分布 (Normal Distribution),当样本足够大（$n \ge 30$）时，二项分布可以用____来近似。,完整：正态分布 (Normal Distribution),Chapter8_Eval,Anki
+805,填空,,置信区间 (Confidence Interval),用于量化估计结果可信程度的区间范围称为____。,完整：置信区间 (Confidence Interval),Chapter8_Eval,Anki
+806,填空,,配对 t 检验 (Paired t-test),比较两个算法在同一数据集上性能差异显著性的常用统计方法是____。,完整：配对 t 检验 (Paired t-test),Chapter8_Eval,Anki
+807,填空,,留一法 (Leave-One-Out),交叉验证的特例，当 k 等于样本总数 N 时，称为____交叉验证。,完整：留一法 (Leave-One-Out),Chapter8_Eval,Anki
+808,填空,,混淆矩阵 (Confusion Matrix),用于详细展示分类模型预测结果（TP, TN, FP, FN）的表格称为____。,完整：混淆矩阵 (Confusion Matrix),Chapter8_Eval,Anki
+809,填空,,准确率 (Precision); 召回率 (Recall); F1分数,分类性能指标：1. ____：预测为正例的样本中真正为正例的比例 ($TP / (TP+FP)$)。; 2. ____：真实正例中被正确预测为正例的比例 ($TP / (TP+FN)$)。; 3. ____：准确率和召回率的调和平均数。,完整：1. 准确率... 2. 召回率... 3. F1分数...,Chapter8_Eval,Anki
+810,填空,,ROC曲线; AUC值,评估分类器在不同阈值下性能的曲线是____，该曲线下的面积称为____。,完整：ROC曲线; AUC值,Chapter8_Eval,Anki

@@ -1,0 +1,8 @@
+id,type,gender,word,cn,forms,example,source
+1401,填空,,推理及优化; 生成式推理策略; 提示工程,大模型推理技术的核心脉络：1. ____：解决显存受限和串行延迟（如量化、KV Cache）。; 2. ____：关注解码过程（如 Top-p 采样、推测性解码）。; 3. ____：激活模型潜能（如 CoT、ReAct）。,完整：1. 推理及优化... 2. 生成式推理策略... 3. 提示工程...,Chapter14_LLM_Reasoning,Anki
+1402,填空,,Inference (推断/应用); Reasoning (逻辑推理),Inference 与 Reasoning 的区别：1. ____：部署模型生成预测，关注效率（工程侧）。; 2. ____：模型内在的思考分析能力，关注智能表现（算法侧）。,完整：1. Inference... 2. Reasoning...,Chapter14_LLM_Reasoning,Anki
+1403,填空,,思维链 (Chain-of-Thought, CoT),通过在 Prompt 中加入中间推理步骤来显著提升 LLM 解决复杂问题能力的技术是____。,完整：思维链 (Chain-of-Thought, CoT),Chapter14_LLM_Reasoning,Anki
+1404,填空,,ReAct (Reasoning + Acting),结合了推理（Reasoning）和行动（Acting），使 LLM 能够使用外部工具的范式是____。,完整：ReAct (Reasoning + Acting),Chapter14_LLM_Reasoning,Anki
+1405,填空,,KV Cache,为了加速自回归解码，缓存 Attention 计算中的 Key 和 Value 矩阵的技术称为____。,完整：KV Cache,Chapter14_LLM_Reasoning,Anki
+1406,填空,,量化 (Quantization),通过降低模型参数的数值精度（如从 FP16 到 INT8/INT4）来减少显存占用和加速计算的技术是____。,完整：量化 (Quantization),Chapter14_LLM_Reasoning,Anki
+1407,填空,,推测性解码 (Speculative Decoding),利用小模型快速生成草稿，再由大模型进行验证的加速策略称为____。,完整：推测性解码 (Speculative Decoding),Chapter14_LLM_Reasoning,Anki

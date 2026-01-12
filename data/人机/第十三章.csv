@@ -1,0 +1,8 @@
+id,type,gender,word,cn,forms,example,source
+1301,填空,,训练数据大; 参数规模大; 耗资巨大,LLM (Large Language Model) 的三大“大”特征是指：1. ____：以TB为单位，涵盖全网文本。; 2. ____：数十亿至万亿级。; 3. ____：训练成本高昂。,完整：1. 训练数据大... 2. 参数规模大... 3. 耗资巨大...,Chapter13_LLM_Intro,Anki
+1302,填空,,临界点; 涌现能力 (Emergent Ability),当模型规模超过某个____时，模型突然获得在较小模型上不存在的新能力，这种现象称为____。,完整：临界点; 涌现能力,Chapter13_LLM_Intro,Anki
+1303,填空,,Transformer; 自注意力 (Self-Attention),现代大语言模型（如 GPT 系列）的基础架构是____，其核心机制是____。,完整：Transformer; 自注意力 (Self-Attention),Chapter13_LLM_Intro,Anki
+1304,填空,,预训练 (Pre-training); 微调 (Fine-tuning),大模型的标准训练范式通常包括两个阶段：1. ____（在大规模无监督数据上学习通用特征）。; 2. ____（在特定任务数据上进行优化）。,完整：1. 预训练... 2. 微调...,Chapter13_LLM_Intro,Anki
+1305,填空,,RLHF (Reinforcement Learning from Human Feedback),为了使大模型的输出符合人类价值观（有用、诚实、无害），通常采用____技术进行对齐。,完整：RLHF (Reinforcement Learning from Human Feedback),Chapter13_LLM_Intro,Anki
+1306,填空,,幻觉 (Hallucination),大模型一本正经地胡说八道，生成与事实不符的内容，这种现象称为____。,完整：幻觉 (Hallucination),Chapter13_LLM_Intro,Anki
+1307,填空,,提示工程 (Prompt Engineering),通过精心设计输入文本来引导大模型生成预期输出的技术称为____。,完整：提示工程 (Prompt Engineering),Chapter13_LLM_Intro,Anki

@@ -1,0 +1,11 @@
+id,type,gender,word,cn,forms,example,source
+901,填空,,初始状态 (Initial State); 可能行动 (Actions); 转移模型 (Transition Model/Result); 目标测试 (Goal Test); 路径耗散函数 (Path Cost Function),人工智能中“问题求解”的五个形式化组成部分：1. ____; 2. ____; 3. ____; 4. ____; 5. ____,完整：1. 初始状态... 2. 可能行动... 3. 转移模型... 4. 目标测试... 5. 路径耗散函数...,Chapter9_SearchBasic,Anki
+902,填空,,OPEN表; CLOSED表,在搜索算法中：____：存放已生成但未被扩展的节点（待考察）。; ____：存放已经扩展过的节点（已考察），用于避免重复搜索。,完整：OPEN表... CLOSED表...,Chapter9_SearchBasic,Anki
+903,填空,,宽度优先搜索 (BFS); 深度优先搜索 (DFS),盲目搜索（无信息搜索）的两种典型策略：1. ____：利用 FIFO 队列，先扩展浅层节点。; 2. ____：利用 LIFO 栈，优先扩展深层节点。,完整：1. 宽度优先搜索 (BFS)... 2. 深度优先搜索 (DFS)...,Chapter9_SearchBasic,Anki
+904,填空,,完备的; 最优的,宽度优先搜索 (BFS) 的性质：如果分支因子有限，BFS 是____（一定能找到解）；如果路径耗散是深度的非递减函数，BFS 是____（能找到耗散最小的解）。,完整：完备的; 最优的,Chapter9_SearchBasic,Anki
+905,填空,,指数级,宽度优先搜索 (BFS) 的主要缺点是空间复杂度为____。,完整：指数级,Chapter9_SearchBasic,Anki
+906,填空,,不完备; 不是最优,深度优先搜索 (DFS) 的性质：DFS 是____（可能陷入死循环）；通常也____。,完整：不完备; 不是最优,Chapter9_SearchBasic,Anki
+907,填空,,迭代加深的深度优先搜索 (IDS),结合了 BFS 的完备性/最优性和 DFS 的空间优势的算法是____。,完整：迭代加深的深度优先搜索 (IDS),Chapter9_SearchBasic,Anki
+908,填空,,启发式函数 (Heuristic Function) $h(n)$,启发式搜索利用____来评估节点到目标节点的代价，从而引导搜索方向。,完整：启发式函数 (Heuristic Function) h(n),Chapter9_SearchBasic,Anki
+909,填空,,$f(n) = g(n) + h(n)$; $g(n)$; $h(n)$,A* 搜索算法的评估函数：____。; 其中 ____ 是起点到当前节点的实际代价，____ 是当前节点到目标的估计代价。,完整：f(n) = g(n) + h(n); g(n); h(n),Chapter9_SearchBasic,Anki
+910,填空,,可采纳性 (Admissibility); 一致性 (Consistency),A* 算法最优性的保证条件：1. 对于树搜索：要求 $h(n)$ 具有____（即 $h(n) \le h^*(n)$，低估真实代价）。; 2. 对于图搜索：要求 $h(n)$ 具有____（单调性）。,完整：1. 可采纳性... 2. 一致性...,Chapter9_SearchBasic,Anki

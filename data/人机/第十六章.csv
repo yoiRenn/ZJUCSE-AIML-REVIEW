@@ -1,0 +1,6 @@
+id,type,gender,word,cn,forms,example,source
+1601,填空,,图像预处理; 多模态编码器; 投影器; 大语言模型,多模态大模型 (MLLM) 的经典架构包含四个核心模块：1. ____：如 Patch Partitioning。; 2. ____：接收且有效编码，如 CLIP。; 3. ____：多模态数据对齐，映射到文本空间。; 4. ____：接收对齐信号并执行推理。,完整：1. 图像预处理... 2. 多模态编码器... 3. 投影器... 4. 大语言模型...,Chapter16_Multimodal,Anki
+1602,填空,,模态对齐; 目标定位; 高分辨率,多模态大模型发展的三个阶段：1. 第一阶段：聚焦____的原型验证（如 CLIP）。; 2. 第二阶段：增加____能力，服务于 Agent（如 Qwen-VL）。; 3. 第三阶段：支持____文档图像，缓解幻觉。,完整：1. 第一阶段... 2. 第二阶段... 3. 第三阶段...,Chapter16_Multimodal,Anki
+1603,填空,,CLIP (Contrastive Language-Image Pre-training),OpenAI 提出的基于对比学习的图文预训练模型，连接了文本和图像语义的是____。,完整：CLIP (Contrastive Language-Image Pre-training),Chapter16_Multimodal,Anki
+1604,填空,,对齐 (Alignment),多模态大模型的关键挑战是如何将视觉特征映射到 LLM 能够理解的语义空间，这一过程称为____。,完整：对齐 (Alignment),Chapter16_Multimodal,Anki
+1605,填空,,指令微调 (Instruction Tuning),为了让 MLLM 能够遵循人类指令完成视觉问答等任务，需要在图文对数据上进行____。,完整：指令微调 (Instruction Tuning),Chapter16_Multimodal,Anki

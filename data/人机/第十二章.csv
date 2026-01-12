@@ -1,0 +1,8 @@
+id,type,gender,word,cn,forms,example,source
+1201,填空,,对抗搜索 (Adversarial Search),在竞争环境中，智能体需根据当前局势选择对自己最有利的行动，这类问题称为____。,完整：对抗搜索 (Adversarial Search),Chapter12_Adversarial,Anki
+1202,填空,,纳什均衡 (Nash Equilibrium),博弈论中的稳定状态：如果任意参与者在其他人策略确定的情况下，单方面改变策略都不会获益，则该组合为____。,完整：纳什均衡 (Nash Equilibrium),Chapter12_Adversarial,Anki
+1203,填空,,零和博弈 (Zero-Sum Game),一方的收益必然意味着另一方的损失，双方收益之和恒为零的博弈称为____。,完整：零和博弈 (Zero-Sum Game),Chapter12_Adversarial,Anki
+1204,填空,,极大极小算法 (Minimax Algorithm); MAX节点; MIN节点,解决零和博弈的经典算法是____；其假设我方选择使效用最大的动作（____），对手选择使我方效用最小的动作（____）。,完整：极大极小算法... MAX节点; MIN节点,Chapter12_Adversarial,Anki
+1205,填空,,Alpha-Beta 剪枝,为了降低 Minimax 算法的计算复杂度，利用已知界限忽略不需要搜索的分支的技术是____。,完整：Alpha-Beta 剪枝,Chapter12_Adversarial,Anki
+1206,填空,,Alpha值; Beta值,Alpha-Beta 剪枝中的两个参数：____：MAX 节点目前发现的最好（最大）值的下界。; ____：MIN 节点目前发现的最好（最小）值的上界。,完整：Alpha值; Beta值,Chapter12_Adversarial,Anki
+1207,填空,,蒙特卡洛树搜索 (MCTS); 选择; 扩展; 模拟; 反向传播,AlphaGo 的核心算法是____；其四个步骤为____、____、____、____。,完整：蒙特卡洛树搜索 (MCTS)... 选择; 扩展; 模拟; 反向传播,Chapter12_Adversarial,Anki

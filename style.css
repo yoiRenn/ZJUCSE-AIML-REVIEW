@@ -1,0 +1,717 @@
+:root {
+    --primary: #3b82f6;
+    --primary-dark: #2563eb;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --bg-color: #f8fafc;
+    --card-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-sub: #64748b;
+    --border: #e2e8f0;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* =========================================
+   主容器与卡片
+   ========================================= */
+.container {
+    width: 100%;
+    max-width: 700px;
+    position: relative;
+}
+
+.app-title {
+    text-align: center;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: 5px;
+    letter-spacing: -0.5px;
+}
+
+.subtitle {
+    text-align: center;
+    color: var(--text-sub);
+    margin-bottom: 25px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.subtitle-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 0 5px;
+}
+
+.stats-box {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-sub);
+    display: flex;
+    gap: 15px;
+}
+
+.clickable {
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.clickable:hover {
+    opacity: 0.8;
+}
+
+.card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    padding: 30px;
+    position: relative;
+    border: 1px solid var(--border);
+    transition: transform 0.2s;
+}
+
+.card-tag {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: #f1f5f9;
+    color: var(--text-sub);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+#btn-fav {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    font-size: 1.5rem;
+    line-height: 1;
+    transition: transform 0.2s;
+}
+
+#btn-fav:hover {
+    transform: scale(1.1);
+}
+
+/* =========================================
+   问题区域 (CSV模式)
+   ========================================= */
+.question-area {
+    margin: 30px 0;
+    min-height: 100px;
+}
+
+.q-text {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.6;
+    margin-bottom: 10px;
+    color: var(--text-main);
+}
+
+.q-sub-text {
+    font-size: 0.95rem;
+    color: var(--text-sub);
+    line-height: 1.5;
+}
+
+/* =========================================
+   输入与交互
+   ========================================= */
+.interaction-area {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.main-input {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 1rem;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    outline: none;
+    transition: all 0.2s;
+    background: #f8fafc;
+}
+
+.main-input:focus {
+    border-color: var(--primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    outline: none;
+}
+
+.btn-primary,
+.btn-secondary {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: transform 0.1s, opacity 0.2s;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+}
+
+.btn-primary:active {
+    transform: scale(0.98);
+}
+
+.btn-secondary {
+    background: var(--success);
+    color: white;
+}
+
+.btn-secondary:hover {
+    opacity: 0.9;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    background: #f1f5f9;
+    color: var(--text-sub);
+}
+
+.btn-small:hover {
+    background: #e2e8f0;
+}
+
+/* =========================================
+   结果反馈 (CSV模式)
+   ========================================= */
+.result {
+    margin-top: 20px;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.result.correct {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.result.wrong {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.info-box {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    animation: fadeIn 0.3s ease;
+}
+
+.info-label {
+    font-weight: 700;
+    color: var(--text-sub);
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
+/* =========================================
+   侧边栏 (Sidebar)
+   ========================================= */
+.bookmark-btn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-main);
+    z-index: 100;
+    transition: transform 0.2s;
+}
+
+.bookmark-btn:hover {
+    transform: translateX(3px);
+}
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: -320px;
+    /* Hide */
+    width: 320px;
+    height: 100%;
+    background: white;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar.active {
+    left: 0;
+}
+
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s;
+}
+
+.sidebar-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.close-sidebar {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-sub);
+}
+
+.sidebar-section {
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    padding-left: 5px;
+}
+
+.sidebar-divider {
+    border: none;
+    border-top: 1px solid #f1f5f9;
+    margin: 15px 0;
+}
+
+.sidebar-btn-group-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sidebar-btn-group-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.sidebar-btn-group-row button {
+    flex: 1;
+}
+
+.btn-sidebar {
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s;
+}
+
+.btn-outline {
+    background: white;
+    border: 1px solid var(--border);
+    color: var(--text-main);
+}
+
+.btn-outline:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.btn-gray {
+    background: #f1f5f9;
+    color: var(--text-main);
+}
+
+.btn-gray:hover {
+    background: #e2e8f0;
+}
+
+.btn-gold {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.btn-gold:hover {
+    background: #fde68a;
+}
+
+.btn-red {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.btn-red:hover {
+    background: #fecaca;
+}
+
+.unit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 400px;
+    /* 防止太长 */
+    overflow-y: auto;
+}
+
+.unit-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.unit-item:hover {
+    background: #f8fafc;
+}
+
+.unit-checkbox {
+    transform: scale(1.2);
+    cursor: pointer;
+}
+
+.badge-count {
+    background: var(--danger);
+    color: white;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: bold;
+}
+
+/* =========================================
+   通用模态框 (Modal)
+   ========================================= */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    display: none;
+    /* JS toggles flex/block */
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(3px);
+}
+
+.modal-content {
+    background: white;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.large-modal {
+    max-width: 800px;
+}
+
+.modal-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #f1f5f9;
+}
+
+.close-btn {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-sub);
+}
+
+.close-btn:hover {
+    color: var(--text-main);
+}
+
+/* =========================================
+   🧠 背诵粉碎机专用样式 (Memory Grinder)
+   ========================================= */
+
+/* 移除所有 modal 相关的样式 (如果以前有 memory-modal 的话) */
+
+/* 嵌入式背诵视图样式 */
+#view-memory {
+    animation: fadeIn 0.3s ease;
+}
+
+.memory-textarea {
+    width: 100%;
+    min-height: 150px;
+    padding: 15px;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    resize: vertical;
+    font-family: inherit;
+    background: #f8fafc;
+    transition: all 0.2s;
+}
+
+.memory-textarea:focus {
+    border-color: #3b82f6;
+    background: #fff;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.answer-card {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 20px;
+    animation: slideUp 0.3s ease;
+}
+
+.memory-label {
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    letter-spacing: 0.5px;
+}
+
+/* =========================================
+   动画与响应式
+   ========================================= */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(10px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 0 10px;
+    }
+
+    .card {
+        padding: 20px;
+    }
+
+    .q-text {
+        font-size: 1.1rem;
+    }
+
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    .stats-box {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* 移动端背诵模式优化 */
+    .memory-modal-content {
+        width: 100%;
+        height: 100%;
+        /* 全屏 */
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .memory-textarea {
+        min-height: 120px;
+        /* 键盘弹起时稍微小一点 */
+    }
+}
+
+/* ... 上面是原来的代码 ... */
+
+/* =========================================
+   [新增] 系统级 Modal & Toast 样式
+   ========================================= */
+
+/* 覆盖 confirm 弹窗样式细节 */
+#sys-modal .modal-content {
+    animation: zoomIn 0.2s ease;
+}
+
+@keyframes zoomIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Toast 轻提示容器 */
+#toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 4000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    /* 让点击穿透 */
+}
+
+/* 单个 Toast */
+.toast-msg {
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: toastSlideDown 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.toast-msg.error {
+    background: #ef4444;
+}
+
+.toast-msg.success {
+    background: #10b981;
+}
+
+@keyframes toastSlideDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes toastFadeOut {
+    to {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
