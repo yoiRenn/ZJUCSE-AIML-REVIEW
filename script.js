@@ -20,6 +20,11 @@ let memoryState = {
 let stats = { totalAnswered: 0, correctCount: 0, wrongCount: 0, sessionWrong: [] };
 let longTermErrors = JSON.parse(localStorage.getItem("longTermErrors") || "[]");
 let favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+// ... 原有的全局变量 ...
+
+// 🟢 新增：题目熟练度数据库 (存 localStorage)
+// 结构: { "题目内容Hash": { level: 0, isVague: false, lastTime: timestamp } }
+let questionStats = JSON.parse(localStorage.getItem("sf_question_stats") || "{}");
 
 /* ==========================================================================
    [新增] 核心工具：替代原生弹窗 (Custom UI)
@@ -42,6 +47,37 @@ function showToast(msg, type = 'info') {
     }, 2000);
 }
 
+// 辅助：计算字符串 Hash 作为唯一ID (防止题目太长做Key)
+// 🟢 修复版：增加了空值校验，防止报错
+function getQHash(str) {
+    // 1. 如果传进来的不是字符串，或者为空，直接返回一个默认ID
+    if (!str || typeof str !== 'string') {
+        return "q_" + Math.random().toString(36).substr(2);
+    }
+
+    let hash = 0, i, chr;
+    if (str.length === 0) return hash;
+    for (i = 0; i < str.length; i++) {
+        chr = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + chr;
+        hash |= 0;
+    }
+    return "q_" + hash;
+}
+
+// 辅助：保存状态
+function saveQuestionStats() {
+    localStorage.setItem("sf_question_stats", JSON.stringify(questionStats));
+}
+
+// 辅助：获取某题的状态
+function getStat(q) {
+    const id = getQHash(q);
+    if (!questionStats[id]) {
+        questionStats[id] = { level: 0, isVague: false, lastTime: 0 };
+    }
+    return questionStats[id];
+}
 // 替代 confirm：返回 Promise 的弹窗
 function showConfirm(msg) {
     return new Promise((resolve) => {
@@ -343,16 +379,80 @@ function handleNextCSV() {
    模式 B: 嵌入式背诵粉碎机
    ========================================================================== */
 function startMemoryGrinder() {
-    if (questionBank.length === 0) return;
+    if (questionBank.length === 0) {
+        showToast("请先在左侧选择章节加载题目！", "error");
+        return;
+    }
 
+    // 🟢 智能抽题算法
+    // 1. 先把题目分类
+    let hard = [], vague = [], easy = [], newQ = [];
+
+    questionBank.forEach(q => {
+        if (!q || !q.question) return;
+        const stat = getStat(q.question);
+        // 强制加入历史错题 (如果在 longTermErrors 里)
+        const isLongTermError = longTermErrors.some(err => err.question === q.question);
+
+        if (isLongTermError || stat.level < 0) {
+            hard.push(q); // 绝对痛点
+        } else if (stat.level === 0) {
+            newQ.push(q); // 新题
+        } else if (stat.isVague || stat.level <= 2) {
+            vague.push(q); // 模糊/半生不熟
+        } else {
+            easy.push(q); // 熟题 (Lv >= 3)
+        }
+    });
+
+    // 2. 动态配比生成队列
+    // 策略：优先塞满 Hard 和 Vague，剩下的位子给 New，最后留一点给 Easy 防遗忘
+    let finalQueue = [];
+
+    // (1) 错题/痛点：全要！
+    finalQueue.push(...hard);
+
+    // (2) 模糊题：全要！
+    finalQueue.push(...vague);
+
+    // (3) 新题：最多取 20 个 (防止一次学太多新崩溃)
+    newQ.sort(() => Math.random() - 0.5);
+    finalQueue.push(...newQ.slice(0, 20));
+
+    // (4) 熟题：只取 10% 做抽查 (或者至少 5 题)
+    easy.sort(() => Math.random() - 0.5);
+    const easyCount = Math.max(5, Math.floor(easy.length * 0.1));
+    finalQueue.push(...easy.slice(0, easyCount));
+
+    // 如果选出来的太少（比如刚开始全是新题），那就多补点新题
+    if (finalQueue.length < 10 && newQ.length > 20) {
+        finalQueue.push(...newQ.slice(20, 30));
+    }
+
+    // 去重 (防止某些题既是错题又是新题)
+    finalQueue = [...new Set(finalQueue)];
+
+    // 打乱顺序
+    finalQueue.sort(() => Math.random() - 0.5);
+
+    if (finalQueue.length === 0) {
+        showToast("没有符合条件的题目，已重置为全量复习", "info");
+        finalQueue = [...questionBank];
+        finalQueue.sort(() => Math.random() - 0.5);
+    }
+
+    // 初始化状态
     memoryState.isActive = true;
-    memoryState.queue = [...questionBank];
-    memoryState.queue.sort(() => Math.random() - 0.5);
+    memoryState.queue = finalQueue;
     memoryState.nextRoundQueue = [];
     memoryState.round = 1;
     memoryState.currentCard = null;
 
     toggleView("memory");
+
+    // 显示本次复习的构成 (让用户心里有数)
+    showToast(`智能生成计划：\n🔴攻坚:${hard.length} 🟡模糊:${vague.length} ⚪️新题:${Math.min(newQ.length, 20)} 🟢抽查:${Math.min(easy.length, easyCount)}`, "success");
+
     loadNextMemoryCard();
     saveMemorySession();
 }
@@ -369,10 +469,19 @@ function loadNextMemoryCard() {
 }
 
 function renderMemoryCard(card) {
-    document.getElementById("memory-round-display").innerText = `Round ${memoryState.round}`;
+    const stat = getStat(card.q);
+
+    // 🟢 视觉优化：显示熟练度等级
+    let levelIcon = "🥚";
+    if (stat.level < 0) levelIcon = "💀"; // 死穴
+    else if (stat.level >= 1) levelIcon = "🐣";
+    else if (stat.level >= 3) levelIcon = "🦅";
+    else if (stat.level >= 5) levelIcon = "👑"; // 大师
+
+    document.getElementById("memory-round-display").innerText = `Round ${memoryState.round} | Lv.${stat.level} ${levelIcon}`;
     document.getElementById("memory-remain").innerText = memoryState.queue.length + 1;
     document.getElementById("memory-q-text").innerHTML = card.q;
-    document.getElementById("q-tag").innerText = "MEMORY";
+    document.getElementById("q-tag").innerText = stat.isVague ? "模糊点 🟡" : (stat.level < 0 ? "错题 🔴" : "MEMORY");
 
     const input = document.getElementById("memory-input");
     input.value = "";
@@ -381,7 +490,15 @@ function renderMemoryCard(card) {
 
     document.getElementById("memory-answer-area").style.display = "none";
     document.getElementById("btn-reveal").style.display = "block";
-    document.getElementById("btn-grade-group").style.display = "none";
+
+    // 🟢 改造按钮组：增加“模糊”按钮
+    const btnGroup = document.getElementById("btn-grade-group");
+    btnGroup.style.display = "none";
+    btnGroup.innerHTML = `
+        <button onclick="rateMemory('wrong')" class="btn-grade wrong">❌ 没记住 (1)</button>
+        <button onclick="rateMemory('vague')" class="btn-grade vague" style="background:#f59e0b;color:white">🤔 模糊 (2)</button>
+        <button onclick="rateMemory('correct')" class="btn-grade correct">✅ 记住了 (Enter)</button>
+    `;
 
     updateFavIcon();
 }
@@ -563,18 +680,51 @@ async function checkWithAI_Async(question, standardAnswer, userAnswer) {
         return null;
     }
 }
-function rateMemory(isPass) {
-    if (isPass) {
+// type: 'correct' | 'wrong' | 'vague'
+function rateMemory(type) {
+    const card = memoryState.currentCard;
+    const stat = getStat(card.q);
+    stat.lastTime = Date.now();
+
+    if (type === 'correct') {
+        // ✅ 记住了：熟练度+1，模糊标记清除
+        stat.level++;
+        stat.isVague = false;
         stats.correctCount++;
-    } else {
-        memoryState.nextRoundQueue.push(memoryState.currentCard);
+        showToast("熟练度 +1 🆙", "success");
+
+        // 如果是从错题集里做对的，把错误记录消掉
+        const errIdx = longTermErrors.findIndex(e => e.question === card.q);
+        if (errIdx !== -1) {
+            longTermErrors.splice(errIdx, 1);
+            localStorage.setItem("longTermErrors", JSON.stringify(longTermErrors));
+        }
+
+    } else if (type === 'wrong') {
+        // ❌ 没记住：熟练度归零（或扣分），强制进入下一轮
+        stat.level = -1; // 变成负数表示“最近做错过”
+        stat.isVague = false;
+
+        memoryState.nextRoundQueue.push(card);
         handleWrongAnswer({
-            question: memoryState.currentCard.q,
-            answer: memoryState.currentCard.a,
+            question: card.q,
+            answer: card.a,
             tag: "Memory",
-            source: memoryState.currentCard.source || "JSON"
+            source: card.source || "JSON"
         });
+        showToast("已加入错题循环 🔴", "error");
+
+    } else if (type === 'vague') {
+        // 🤔 模糊：熟练度不变（或微降），标记为模糊，进入下一轮
+        stat.isVague = true;
+        if (stat.level > 0) stat.level--; // 稍微降一点级
+
+        memoryState.nextRoundQueue.push(card); // 模糊的也要再来一遍！
+        showToast("标记为模糊，稍后重试 🟡", "info");
     }
+
+    // 保存状态
+    saveQuestionStats();
 
     stats.totalAnswered++;
     updateStatsUI();
@@ -651,21 +801,25 @@ function setupEventListeners() {
     });
 
     // 🟢 快捷键逻辑：判分
+    // ...
+    // 🟢 快捷键逻辑：判分
     document.addEventListener("keydown", (e) => {
         const memView = document.getElementById("view-memory");
         const gradeGrp = document.getElementById("btn-grade-group");
-
-        // 🔴 关键：只有在系统弹窗隐藏时，才允许快捷键判题，防止弹窗还没关就触发了下层逻辑
         const sysModal = document.getElementById("sys-modal");
 
         if (memView.style.display !== "none" &&
-            gradeGrp.style.display === "flex" &&
+            gradeGrp.style.display !== "none" && // 注意这里改成不为 none 即可
             sysModal.style.display === "none") {
 
-            if (e.key === "1") { e.preventDefault(); rateMemory(false); }
-            if (e.key === "Enter" && !e.ctrlKey) { e.preventDefault(); rateMemory(true); }
+            if (e.key === "1") { e.preventDefault(); rateMemory('wrong'); }
+            if (e.key === "2") { e.preventDefault(); rateMemory('vague'); } // 新增按键 2
+            if (e.key === "3" || e.key === "Enter") {
+                if (!e.ctrlKey) { e.preventDefault(); rateMemory('correct'); }
+            }
         }
     });
+    // ...
 
     document.getElementById("btn-fav").onclick = toggleFav;
     document.getElementById("wrong-count").onclick = retryWrong;
