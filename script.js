@@ -116,19 +116,60 @@ function renderMath(elementId) {
 }
 
 /* ==========================================================================
-   3. 初始化 (Init)
+   3. 初始化 (Init) - 强力调试版
    ========================================================================== */
 document.addEventListener("DOMContentLoaded", async () => {
+    // 1. 打印当前环境信息，方便排查路径
+    console.log("当前页面路径:", window.location.href);
+
     try {
-        const res = await fetch("data/config.json");
+        const configUrl = "data/config.json";
+        console.log(`准备请求: ${configUrl}`);
+
+        const res = await fetch(configUrl);
+
+        // 🟢 显影关键点 1: 检查 HTTP 状态码
+        console.log(`请求状态: ${res.status} ${res.statusText}`);
+
         if (res.ok) {
-            globalConfig = await res.json();
+            const rawConfig = await res.json();
+            console.log("Config 内容:", rawConfig); // 看看是不是空的
+
+            // 🟢 智能识别配置格式
+            if (Array.isArray(rawConfig)) {
+                globalConfig = { "默认题库": rawConfig };
+                globalConfig._isFlat = true;
+            } else {
+                globalConfig = rawConfig;
+                globalConfig._isFlat = false;
+            }
+
             initCategorySelect();
+        } else {
+            // 🔴 显影关键点 2: 如果 404 了，在这里报错
+            console.error("加载失败，状态码:", res.status);
+            showToast(`配置加载失败 (HTTP ${res.status})`, "error");
+
+            // 在列表里直接显示错误信息，防止 Toast 消失看不见
+            const list = document.getElementById("unit-list");
+            if (list) {
+                list.innerHTML = `
+                    <div style="padding:20px; color:#ef4444; background:#fef2f2; border:1px solid #fecaca; border-radius:8px;">
+                        <strong>⚠️ 无法加载配置文件</strong><br>
+                        1. 请求地址: <code>${new URL(configUrl, window.location.href).href}</code><br>
+                        2. 状态码: <b>${res.status}</b> (通常是 404)<br>
+                        3. 请检查GitHub仓库里 <b>data</b> 文件夹和 <b>config.json</b> 是否全是小写！
+                    </div>
+                `;
+            }
         }
-    } catch (e) { console.error("Config error", e); }
+    } catch (e) {
+        console.error("代码炸了:", e);
+        showToast("发生系统错误: " + e.message, "error");
+    }
 
     setupEventListeners();
-    updateLobbyUI(); // 初始化大厅状态
+    updateLobbyUI();
 });
 
 /* ==========================================================================
