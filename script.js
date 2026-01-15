@@ -1,14 +1,13 @@
 /* ==========================================================================
-   全局状态 (Global State)
+   1. 全局配置与状态 (Global State)
    ========================================================================== */
 let globalConfig = {};
-let currentCategory = "";
-let currentMode = "csv";
+let currentCategory = "QA";
 let questionBank = [];
-let currentQuestion = null;
-let currentIndex = 0;
-let userApiKey = localStorage.getItem("sf_api_key") || ""; // 启动时自动读取
-let userModel = localStorage.getItem("sf_user_model") || "gemini-1.5-flash";
+let userApiKey = localStorage.getItem("sf_api_key") || "";
+let userModel = localStorage.getItem("sf_user_model") || "Qwen/Qwen2.5-14B-Instruct";
+
+// 核心背诵状态
 let memoryState = {
     isActive: false,
     queue: [],
@@ -17,60 +16,79 @@ let memoryState = {
     currentCard: null
 };
 
-let stats = { totalAnswered: 0, correctCount: 0, wrongCount: 0, sessionWrong: [] };
-let longTermErrors = JSON.parse(localStorage.getItem("longTermErrors") || "[]");
-let favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
-// ... 原有的全局变量 ...
-
-// 🟢 新增：题目熟练度数据库 (存 localStorage)
-// 结构: { "题目内容Hash": { level: 0, isVague: false, lastTime: timestamp } }
+// 熟练度系统
 let questionStats = JSON.parse(localStorage.getItem("sf_question_stats") || "{}");
+// 错题本 (长期)
+let longTermErrors = JSON.parse(localStorage.getItem("longTermErrors") || "[]");
+// 收藏
+let favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+
+let sessionStats = { total: 0, correct: 0, wrong: 0 };
+let selectedFiles = [];
 
 /* ==========================================================================
-   [新增] 核心工具：替代原生弹窗 (Custom UI)
+   2. 核心工具函数 (Utils)
    ========================================================================== */
 
-// 替代 alert：轻提示 (自动消失)
 function showToast(msg, type = 'info') {
     const container = document.getElementById('toast-container');
+    if (!container) return;
+
     const el = document.createElement('div');
     el.className = `toast-msg ${type}`;
-    // 简单加个图标
     const icon = type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️');
     el.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
     container.appendChild(el);
 
-    // 2秒后消失
     setTimeout(() => {
         el.style.animation = "toastFadeOut 0.3s ease forwards";
         setTimeout(() => el.remove(), 300);
     }, 2000);
 }
 
-// 辅助：计算字符串 Hash 作为唯一ID (防止题目太长做Key)
-// 🟢 修复版：增加了空值校验，防止报错
-function getQHash(str) {
-    // 1. 如果传进来的不是字符串，或者为空，直接返回一个默认ID
-    if (!str || typeof str !== 'string') {
-        return "q_" + Math.random().toString(36).substr(2);
-    }
+function showConfirm(msg) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('sys-modal');
+        if (!modal) { resolve(confirm(msg)); return; }
 
-    let hash = 0, i, chr;
-    if (str.length === 0) return hash;
-    for (i = 0; i < str.length; i++) {
-        chr = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + chr;
+        const msgEl = document.getElementById('sys-modal-msg');
+        const btnOk = document.getElementById('sys-btn-confirm');
+        const btnCancel = document.getElementById('sys-btn-cancel');
+
+        msgEl.innerText = msg;
+        modal.style.display = 'flex';
+
+        const cleanup = () => {
+            modal.style.display = 'none';
+            btnOk.removeEventListener('click', handleOk);
+            btnCancel.removeEventListener('click', handleCancel);
+            document.removeEventListener('keydown', handleKey);
+        };
+
+        const handleOk = () => { cleanup(); resolve(true); };
+        const handleCancel = () => { cleanup(); resolve(false); };
+
+        const handleKey = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); btnOk.click(); }
+            if (e.key === 'Escape') { e.preventDefault(); btnCancel.click(); }
+        };
+
+        btnOk.addEventListener('click', handleOk, { once: true });
+        btnCancel.addEventListener('click', handleCancel, { once: true });
+        document.addEventListener('keydown', handleKey);
+    });
+}
+
+function getQHash(str) {
+    if (!str || typeof str !== 'string') return "q_" + Math.random().toString(36).substr(2);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
         hash |= 0;
     }
     return "q_" + hash;
 }
 
-// 辅助：保存状态
-function saveQuestionStats() {
-    localStorage.setItem("sf_question_stats", JSON.stringify(questionStats));
-}
-
-// 辅助：获取某题的状态
 function getStat(q) {
     const id = getQHash(q);
     if (!questionStats[id]) {
@@ -78,383 +96,281 @@ function getStat(q) {
     }
     return questionStats[id];
 }
-// 替代 confirm：返回 Promise 的弹窗
-function showConfirm(msg) {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('sys-modal');
-        const msgEl = document.getElementById('sys-modal-msg');
-        const btnOk = document.getElementById('sys-btn-confirm');
-        const btnCancel = document.getElementById('sys-btn-cancel');
 
-        msgEl.innerText = msg;
-        modal.style.display = 'flex'; // 显示弹窗
+function saveQuestionStats() {
+    localStorage.setItem("sf_question_stats", JSON.stringify(questionStats));
+}
 
-        // 临时点击事件处理
-        const handleOk = () => {
-            cleanup();
-            resolve(true);
-        };
-        const handleCancel = () => {
-            cleanup();
-            resolve(false);
-        };
+async function fetchJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+}
 
-        // 绑定事件 (使用 once:true 防止重复绑定)
-        btnOk.addEventListener('click', handleOk, { once: true });
-        btnCancel.addEventListener('click', handleCancel, { once: true });
-
-        // 支持回车和ESC
-        const handleKey = (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault(); e.stopPropagation();
-                btnOk.click();
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault(); e.stopPropagation();
-                btnCancel.click();
-            }
-        };
-        document.addEventListener('keydown', handleKey);
-
-        // 清理函数
-        function cleanup() {
-            modal.style.display = 'none';
-            btnOk.removeEventListener('click', handleOk);
-            btnCancel.removeEventListener('click', handleCancel);
-            document.removeEventListener('keydown', handleKey);
-        }
-    });
+function renderMath(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([el]).catch(err => console.log(err));
+    }
 }
 
 /* ==========================================================================
-   初始化 (Initialization)
+   3. 初始化 (Init)
    ========================================================================== */
 document.addEventListener("DOMContentLoaded", async () => {
     try {
         const res = await fetch("data/config.json");
-        if (!res.ok) throw new Error("Config load failed");
-        globalConfig = await res.json();
+        if (res.ok) {
+            globalConfig = await res.json();
+            initCategorySelect();
+        }
+    } catch (e) { console.error("Config error", e); }
 
-        initCategorySelect();
-        updateStatsUI();
-        restoreMemorySession();
-
-    } catch (e) {
-        showToast("配置文件加载失败", "error");
-        console.error(e);
-    }
     setupEventListeners();
+    updateLobbyUI(); // 初始化大厅状态
 });
 
 /* ==========================================================================
-   状态保存与恢复
+   4. 界面与大厅逻辑 (Lobby)
    ========================================================================== */
-function saveMemorySession() {
-    if (!memoryState.isActive) return;
-    localStorage.setItem("memory_session", JSON.stringify(memoryState));
-}
 
-function clearMemorySession() {
-    localStorage.removeItem("memory_session");
-    memoryState.isActive = false;
-    memoryState.currentCard = null;
-}
-
-async function restoreMemorySession() {
-    const saved = localStorage.getItem("memory_session");
-    if (!saved) return;
-
-    try {
-        const session = JSON.parse(saved);
-        if (session.isActive && (session.queue.length > 0 || session.currentCard)) {
-            // 🟢 替换 confirm
-            const shouldContinue = await showConfirm(`检测到上次有未完成的背诵进度 (第 ${session.round} 轮，剩余 ${session.queue.length + 1} 题)。\n是否继续？`);
-
-            if (shouldContinue) {
-                memoryState = session;
-                currentMode = "json";
-                toggleView("memory");
-                if (memoryState.currentCard) {
-                    renderMemoryCard(memoryState.currentCard);
-                } else {
-                    loadNextMemoryCard();
-                }
-            } else {
-                clearMemorySession();
-            }
-        }
-    } catch (e) {
-        console.error("存档损坏", e);
-        clearMemorySession();
-    }
-}
-
-/* ==========================================================================
-   界面切换
-   ========================================================================== */
 function toggleView(viewName) {
-    const csvView = document.getElementById("view-csv");
-    const memView = document.getElementById("view-memory");
+    const welcomeView = document.getElementById("view-welcome");
+    const memoryView = document.getElementById("view-memory");
+    const sidebar = document.getElementById("sidebar");
 
-    if (viewName === "csv") {
-        csvView.style.display = "block";
-        memView.style.display = "none";
-        document.getElementById("category-select").disabled = false;
+    if (viewName === "memory") {
+        welcomeView.style.display = "none";
+        memoryView.style.display = "block";
+        if (sidebar) sidebar.classList.remove("active");
     } else {
-        csvView.style.display = "none";
-        memView.style.display = "block";
-        document.getElementById("category-select").disabled = true;
+        welcomeView.style.display = "flex";
+        memoryView.style.display = "none";
+        updateLobbyUI(); // 每次回大厅都刷新UI
     }
 }
+
+function updateLobbyUI() {
+    // 🟢 1. 检查 API Key
+    const warningBanner = document.getElementById("api-warning-banner");
+    if (warningBanner) {
+        if (!userApiKey) {
+            warningBanner.style.display = "flex";
+        } else {
+            warningBanner.style.display = "none";
+        }
+    }
+
+    // 2. 检查存档
+    const saved = localStorage.getItem("memory_session");
+    const btnContinue = document.getElementById("btn-continue");
+    const infoContinue = document.getElementById("continue-info");
+
+    if (saved) {
+        try {
+            const sess = JSON.parse(saved);
+            if (sess.isActive && (sess.queue.length > 0 || sess.currentCard)) {
+                btnContinue.style.display = "flex";
+                infoContinue.innerText = `Round ${sess.round} | 剩余 ${sess.queue.length + 1} 题`;
+            } else {
+                btnContinue.style.display = "none";
+            }
+        } catch (e) { btnContinue.style.display = "none"; }
+    } else {
+        btnContinue.style.display = "none";
+    }
+
+    // 3. 检查错题本
+    const btnMistakes = document.getElementById("btn-mistakes");
+    const infoMistakes = document.getElementById("mistake-info");
+    const count = longTermErrors.length;
+
+    if (count > 0) {
+        infoMistakes.innerText = `累计 ${count} 道痛点`;
+        btnMistakes.style.opacity = "1";
+        btnMistakes.disabled = false;
+    } else {
+        infoMistakes.innerText = "暂无错题";
+        btnMistakes.style.opacity = "0.6";
+        btnMistakes.disabled = true;
+    }
+}
+
+// 继续进度
+window.continueSession = function () {
+    restoreMemorySession();
+};
 
 function initCategorySelect() {
-    const select = document.getElementById("category-select");
-    select.innerHTML = "";
-    Object.keys(globalConfig).forEach((key, idx) => {
-        const op = document.createElement("option");
-        op.value = key; op.innerText = key;
-        select.appendChild(op);
-        if (idx === 0) currentCategory = key;
-    });
-
-    updateUnitList();
-
-    select.addEventListener("change", async (e) => {
-        if (memoryState.isActive) {
-            showToast("请先退出当前的背诵模式！", "error");
-            e.target.value = currentCategory;
-            return;
-        }
-        currentCategory = e.target.value;
+    const keys = Object.keys(globalConfig);
+    if (keys.length > 0) {
         updateUnitList();
-        resetCSVState();
-    });
+    }
 }
 
 function updateUnitList() {
     const list = document.getElementById("unit-list");
+    if (!list) return;
     list.innerHTML = "";
-    const units = globalConfig[currentCategory] || [];
 
-    if (units.length > 0 && units[0].endsWith(".json")) {
-        currentMode = "json";
-    } else {
-        currentMode = "csv";
+    const units = globalConfig[currentCategory] || [];
+    // 兼容：如果不以 .json 结尾，也当作是题目文件
+    const jsonUnits = units.filter(u => typeof u === 'string');
+
+    if (jsonUnits.length === 0) {
+        list.innerHTML = `<div style="padding:10px; color:#94a3b8;">此分类下没有文件</div>`;
+        return;
     }
 
-    toggleView("csv");
+    // 🟢 章节名称映射表 (你的个性化配置)
+    const chapterMap = {
+        "1": "第一章：概念学习",
+        "2": "第二章：线性模型",
+        "3": "第三章：决策树",
+        "4": "第四章：神经网络",
+        "5": "第五章：贝叶斯学习",
+        "6": "第六章：聚类算法",
+        "7": "第七章：强化学习",
+        "8": "第八章：算法评估",
+        "9": "第九章：搜索算法",
+        "10": "第十章：实时、增量、知识搜索",
+        "11": "第十一章：大模型 I <智能体>",  // 罗马数字 I
+        "12": "第十二章：对抗搜索",
+        "13": "第十三章：大模型 II <基础>",   // 罗马数字 II
+        "14": "第十四章：大模型 III <推理>",  // 罗马数字 III
+        "16": "第十六章：大模型 IV <多模态>", // 罗马数字 IV
+        "add": "补充题"
+    };
 
-    units.forEach((u, i) => {
+    jsonUnits.forEach((u, i) => {
         const div = document.createElement("div");
         div.className = "unit-item";
-        div.innerHTML = `<input type="checkbox" id="u${i}" value="${u}" class="unit-checkbox"><label for="u${i}">${u.replace(/\.(csv|json)$/, '')}</label>`;
+
+        // 点击整个条目都能触发勾选
+        div.onclick = (e) => {
+            // 防止点击 checkbox 本身时触发两次
+            if (e.target.type !== 'checkbox') {
+                const cb = document.getElementById(`u${i}`);
+                cb.checked = !cb.checked;
+                updateSelectionStats();
+            }
+        };
+
+        // 🟢 获取显示名称
+        // 假设你的文件名是 "1.json", "2.json" 等
+        const fileKey = u.replace(".json", "");
+        // 如果映射表里有这个 key，就用映射的名字，否则显示原文件名
+        const displayName = chapterMap[fileKey] || fileKey;
+
+        div.innerHTML = `
+            <input type="checkbox" id="u${i}" value="${u}" class="unit-checkbox">
+            <label for="u${i}" style="pointer-events:none;">${displayName}</label>
+        `;
         list.appendChild(div);
     });
-
-    document.querySelectorAll(".unit-checkbox").forEach(cb => cb.addEventListener("change", loadSelectedUnits));
 }
 
-async function loadSelectedUnits() {
-    if (memoryState.isActive) return;
-
+function updateSelectionStats() {
     const cbs = document.querySelectorAll(".unit-checkbox:checked");
-    const files = Array.from(cbs).map(c => c.value);
+    selectedFiles = Array.from(cbs).map(c => c.value);
+    document.getElementById("selection-stats").innerText = `已选 ${selectedFiles.length} 章`;
 
-    if (files.length === 0) {
-        resetCSVState();
-        return;
+    const btnLaunch = document.getElementById("btn-launch");
+    if (btnLaunch) {
+        btnLaunch.disabled = selectedFiles.length === 0;
+        btnLaunch.innerText = selectedFiles.length > 0 ? `🚀 启动 (${selectedFiles.length}章)` : "请先选择章节";
+        btnLaunch.style.opacity = selectedFiles.length > 0 ? "1" : "0.5";
+    }
+}
+
+// 启动新复习 (章节选择)
+async function launchReview() {
+    if (selectedFiles.length === 0) return;
+
+    // 如果有旧存档，提示会覆盖
+    if (localStorage.getItem("memory_session")) {
+        const overwrite = await showConfirm("开启新复习将覆盖当前的【继续游戏】进度。\n确定要重新开始吗？");
+        if (!overwrite) return;
     }
 
-    questionBank = [];
-    document.getElementById("q-unit").innerText = "Loading...";
-
+    showToast("正在装填弹药...", "info");
+    let newBank = [];
     try {
-        if (currentMode === "csv") {
-            for (const f of files) {
-                const text = await fetchFile(`data/${currentCategory}/${f}`);
-                questionBank = questionBank.concat(parseCSV(text, f));
-            }
-            toggleView("csv");
-            document.getElementById("btn-start-memory").style.display = "none";
-            document.getElementById("input-full").style.display = "block";
-            document.getElementById("btn-submit").style.display = "inline-block";
-            startCSVQuiz();
-        } else {
-            for (const f of files) {
-                const json = await fetchJSON(`data/${currentCategory}/${f}`);
-                json.forEach(j => j.source = f);
-                questionBank = questionBank.concat(json);
-            }
-            toggleView("csv");
-            document.getElementById("q-main").innerText = `已加载 ${questionBank.length} 道问答题`;
-            document.getElementById("q-sub").innerText = "准备好开始死磕了吗？点击下方红色按钮启动！";
-            document.getElementById("input-full").style.display = "none";
-            document.getElementById("btn-submit").style.display = "none";
-            document.getElementById("btn-next").style.display = "none";
-            document.getElementById("result-area").style.display = "none";
-
-            const startBtn = document.getElementById("btn-start-memory");
-            startBtn.style.display = "block";
-            startBtn.innerText = `🚀 启动背诵粉碎机 (${questionBank.length}题)`;
+        for (const f of selectedFiles) {
+            const json = await fetchJSON(`data/${currentCategory}/${f}`);
+            json.forEach(j => j.source = f.replace(".json", ""));
+            newBank = newBank.concat(json);
         }
-        document.getElementById("q-unit").innerText = `${files.length} 章 / ${questionBank.length} 题`;
+        startMemoryGrinder(newBank);
+        // 收起侧边栏
+        document.getElementById("sidebar").classList.remove("active");
     } catch (e) {
-        console.error(e);
-        showToast("加载失败，请检查文件", "error");
+        showToast("题库加载失败: " + e.message, "error");
     }
 }
 
 /* ==========================================================================
-   模式 A: CSV 填空逻辑
+   5. 智能背诵引擎 (Engine)
    ========================================================================== */
-function resetCSVState() {
-    questionBank = [];
-    document.getElementById("q-main").innerText = "请选择章节...";
-    document.getElementById("q-sub").innerText = "";
-    document.getElementById("input-full").value = "";
-    document.getElementById("input-full").style.display = "block";
-    document.getElementById("btn-start-memory").style.display = "none";
-    document.getElementById("result-area").style.display = "none";
-}
 
-function startCSVQuiz() {
-    if (questionBank.length === 0) return;
-    questionBank.sort(() => Math.random() - 0.5);
-    currentIndex = 0;
-    loadNextCSVQuestion();
-}
-
-function loadNextCSVQuestion() {
-    if (currentIndex >= questionBank.length) {
-        showToast("🎉 本轮填空练习结束！", "success");
-        currentIndex = 0;
-        questionBank.sort(() => Math.random() - 0.5);
-    }
-    currentQuestion = questionBank[currentIndex];
-    document.getElementById("q-tag").innerText = currentQuestion.tag || "Q&A";
-    document.getElementById("q-main").innerText = currentQuestion.question;
-    document.getElementById("q-sub").innerText = "";
-    document.getElementById("input-full").value = "";
-    document.getElementById("input-full").focus();
-    document.getElementById("result-area").style.display = "none";
-    document.getElementById("info-area").style.display = "none";
-    document.getElementById("btn-submit").style.display = "inline-block";
-    document.getElementById("btn-next").style.display = "none";
-    updateFavIcon();
-}
-
-function checkCSVAnswer() {
-    const input = document.getElementById("input-full").value.trim();
-    if (!input) return;
-    const correct = currentQuestion.answer;
-    const keywords = input.split(/\s+/);
-    let isRight = true;
-    keywords.forEach(k => { if (!correct.includes(k)) isRight = false; });
-
-    const resArea = document.getElementById("result-area");
-    resArea.style.display = "block";
-    document.getElementById("info-area").style.display = "block";
-    document.getElementById("info-content").innerHTML = correct;
-
-    if (isRight) {
-        resArea.className = "result correct"; resArea.innerText = "✅ 正确";
-        stats.correctCount++;
-    } else {
-        resArea.className = "result wrong"; resArea.innerText = "❌ 错误";
-        handleWrongAnswer(currentQuestion);
-    }
-    stats.totalAnswered++;
-    updateStatsUI();
-    document.getElementById("btn-submit").style.display = "none";
-    document.getElementById("btn-next").style.display = "inline-block";
-    document.getElementById("btn-next").focus();
-}
-
-function handleNextCSV() {
-    currentIndex++;
-    loadNextCSVQuestion();
-}
-
-/* ==========================================================================
-   模式 B: 嵌入式背诵粉碎机
-   ========================================================================== */
-function startMemoryGrinder() {
-    if (questionBank.length === 0) {
-        showToast("请先在左侧选择章节加载题目！", "error");
+// isRetryMode: 是否为错题本/收藏夹模式 (不生成新题)
+function startMemoryGrinder(sourceBank, isRetryMode = false) {
+    if (!sourceBank || sourceBank.length === 0) {
+        showToast("没有题目！", "error");
         return;
     }
 
-    // 🟢 智能抽题算法
-    // 1. 先把题目分类
-    let hard = [], vague = [], easy = [], newQ = [];
-
-    questionBank.forEach(q => {
-        if (!q || !q.question) return;
-        const stat = getStat(q.question);
-        // 强制加入历史错题 (如果在 longTermErrors 里)
-        const isLongTermError = longTermErrors.some(err => err.question === q.question);
-
-        if (isLongTermError || stat.level < 0) {
-            hard.push(q); // 绝对痛点
-        } else if (stat.level === 0) {
-            newQ.push(q); // 新题
-        } else if (stat.isVague || stat.level <= 2) {
-            vague.push(q); // 模糊/半生不熟
-        } else {
-            easy.push(q); // 熟题 (Lv >= 3)
-        }
-    });
-
-    // 2. 动态配比生成队列
-    // 策略：优先塞满 Hard 和 Vague，剩下的位子给 New，最后留一点给 Easy 防遗忘
     let finalQueue = [];
 
-    // (1) 错题/痛点：全要！
-    finalQueue.push(...hard);
+    if (isRetryMode) {
+        // 错题本模式：直接用传进来的队列
+        finalQueue = [...sourceBank];
+    } else {
+        // 算法模式
+        let hard = [], vague = [], easy = [], newQ = [];
+        sourceBank.forEach(q => {
+            if (!q || !q.question) return;
+            const stat = getStat(q.question);
+            const isLongTermError = longTermErrors.some(err => err.question === q.question);
 
-    // (2) 模糊题：全要！
-    finalQueue.push(...vague);
+            if (isLongTermError || stat.level < 0) hard.push(q);
+            else if (stat.level === 0) newQ.push(q);
+            else if (stat.isVague || stat.level <= 2) vague.push(q);
+            else easy.push(q);
+        });
 
-    // (3) 新题：最多取 20 个 (防止一次学太多新崩溃)
-    newQ.sort(() => Math.random() - 0.5);
-    finalQueue.push(...newQ.slice(0, 20));
+        finalQueue.push(...hard);
+        finalQueue.push(...vague);
 
-    // (4) 熟题：只取 10% 做抽查 (或者至少 5 题)
-    easy.sort(() => Math.random() - 0.5);
-    const easyCount = Math.max(5, Math.floor(easy.length * 0.1));
-    finalQueue.push(...easy.slice(0, easyCount));
+        newQ.sort(() => Math.random() - 0.5);
+        finalQueue.push(...newQ.slice(0, 20)); // 每次最多20新题
 
-    // 如果选出来的太少（比如刚开始全是新题），那就多补点新题
-    if (finalQueue.length < 10 && newQ.length > 20) {
-        finalQueue.push(...newQ.slice(20, 30));
-    }
+        easy.sort(() => Math.random() - 0.5);
+        finalQueue.push(...easy.slice(0, Math.max(5, Math.floor(easy.length * 0.1))));
 
-    // 去重 (防止某些题既是错题又是新题)
-    finalQueue = [...new Set(finalQueue)];
+        if (finalQueue.length < 10 && newQ.length > 20) {
+            finalQueue.push(...newQ.slice(20, 30));
+        }
+        finalQueue = [...new Set(finalQueue)];
+        if (finalQueue.length === 0) finalQueue = [...sourceBank];
 
-    // 打乱顺序
-    finalQueue.sort(() => Math.random() - 0.5);
-
-    if (finalQueue.length === 0) {
-        showToast("没有符合条件的题目，已重置为全量复习", "info");
-        finalQueue = [...questionBank];
+        // 普通模式下打乱
         finalQueue.sort(() => Math.random() - 0.5);
+        showToast(`计划生成：\n🔴攻坚:${hard.length} 🟡模糊:${vague.length} ⚪️新:${Math.min(newQ.length, 20)}`, "success");
     }
 
-    // 初始化状态
+    // 初始化背诵状态
     memoryState.isActive = true;
     memoryState.queue = finalQueue;
     memoryState.nextRoundQueue = [];
     memoryState.round = 1;
     memoryState.currentCard = null;
+    sessionStats = { total: 0, correct: 0, wrong: 0 };
 
     toggleView("memory");
-
-    // 显示本次复习的构成 (让用户心里有数)
-    showToast(`智能生成计划：\n🔴攻坚:${hard.length} 🟡模糊:${vague.length} ⚪️新题:${Math.min(newQ.length, 20)} 🟢抽查:${Math.min(easy.length, easyCount)}`, "success");
-
     loadNextMemoryCard();
-    saveMemorySession();
+    saveMemorySession(); // 立即存档
 }
 
 function loadNextMemoryCard() {
@@ -462,26 +378,38 @@ function loadNextMemoryCard() {
         handleMemoryRoundEnd();
         return;
     }
-
     memoryState.currentCard = memoryState.queue.pop();
     saveMemorySession();
     renderMemoryCard(memoryState.currentCard);
 }
 
 function renderMemoryCard(card) {
-    const stat = getStat(card.q);
+    const stat = getStat(card.question || card.q);
 
-    // 🟢 视觉优化：显示熟练度等级
     let levelIcon = "🥚";
-    if (stat.level < 0) levelIcon = "💀"; // 死穴
+    if (stat.level < 0) levelIcon = "💀";
     else if (stat.level >= 1) levelIcon = "🐣";
     else if (stat.level >= 3) levelIcon = "🦅";
-    else if (stat.level >= 5) levelIcon = "👑"; // 大师
+    else if (stat.level >= 5) levelIcon = "👑";
 
-    document.getElementById("memory-round-display").innerText = `Round ${memoryState.round} | Lv.${stat.level} ${levelIcon}`;
+    const roundDisplay = document.getElementById("memory-round-display");
+    if (roundDisplay) roundDisplay.innerText = `R${memoryState.round} | Lv.${stat.level} ${levelIcon}`;
+
     document.getElementById("memory-remain").innerText = memoryState.queue.length + 1;
-    document.getElementById("memory-q-text").innerHTML = card.q;
-    document.getElementById("q-tag").innerText = stat.isVague ? "模糊点 🟡" : (stat.level < 0 ? "错题 🔴" : "MEMORY");
+    document.getElementById("memory-q-text").innerHTML = card.question || card.q;
+
+    const tagEl = document.getElementById("q-tag");
+    // 如果是错题本模式，显示错误次数
+    if (longTermErrors.some(e => e.question === (card.question || card.q))) {
+        const errCount = longTermErrors.find(e => e.question === (card.question || card.q)).count;
+        tagEl.innerText = `错误 ${errCount} 次 🔴`;
+        tagEl.className = "badge badge-danger";
+        tagEl.style.background = "#fee2e2";
+        tagEl.style.color = "#991b1b";
+    } else {
+        tagEl.innerText = stat.isVague ? "模糊 🟡" : "Review";
+        tagEl.className = stat.isVague ? "badge vague-tag" : "badge tag-badge";
+    }
 
     const input = document.getElementById("memory-input");
     input.value = "";
@@ -489,49 +417,147 @@ function renderMemoryCard(card) {
     input.focus();
 
     document.getElementById("memory-answer-area").style.display = "none";
+    document.getElementById("ai-feedback-box").style.display = "none";
     document.getElementById("btn-reveal").style.display = "block";
-
-    // 🟢 改造按钮组：增加“模糊”按钮
-    const btnGroup = document.getElementById("btn-grade-group");
-    btnGroup.style.display = "none";
-    btnGroup.innerHTML = `
-        <button onclick="rateMemory('wrong')" class="btn-grade wrong">❌ 没记住 (1)</button>
-        <button onclick="rateMemory('vague')" class="btn-grade vague" style="background:#f59e0b;color:white">🤔 模糊 (2)</button>
-        <button onclick="rateMemory('correct')" class="btn-grade correct">✅ 记住了 (Enter)</button>
-    `;
+    document.getElementById("btn-grade-group").style.display = "none";
 
     updateFavIcon();
 }
-// ==========================================
-// 辅助：本地关键词高亮 (极速版)
-// ==========================================
-function highlightKeywords(userText, standardText) {
-    // 简单的分词：提取标准答案里的中文名词或英文单词
-    // 这里用简单粗暴的策略：按标点和空格切分，取长度>1的词
-    const keywords = standardText.split(/[，。；：,.;:\s\(\)（）\n]+/)
-        .filter(k => k.length >= 2 && !['什么', '怎么', '原理', '特点'].includes(k));
 
-    let processedText = userText;
-    let hitCount = 0;
+function rateMemory(type) {
+    if (!memoryState.currentCard) return;
 
-    keywords.forEach(kw => {
-        if (userText.includes(kw)) {
-            // 给匹配到的词加绿色背景
-            const reg = new RegExp(kw, 'g');
-            processedText = processedText.replace(reg, `<span style="background:#bbf7d0; color:#14532d; padding:0 2px; border-radius:2px;">${kw}</span>`);
-            hitCount++;
-        }
-    });
+    const card = memoryState.currentCard;
+    const qText = card.question || card.q;
+    const stat = getStat(qText);
+    stat.lastTime = Date.now();
 
-    return {
-        html: processedText,
-        hitRate: keywords.length > 0 ? (hitCount / keywords.length) : 0,
-        missed: keywords.filter(k => !userText.includes(k)) // 找出没命中的词
-    };
+    if (type === 'correct') {
+        stat.level++;
+        stat.isVague = false;
+        sessionStats.correct++;
+        showToast("熟练度 +1 🆙", "success");
+
+        // 🟢 做对了就从错题本里移除？用户说必须留着。
+        // 现在的逻辑：如果做对了，暂不移除，或者减少错误权重？
+        // 用户原话：“长期错题本必须留着”。
+        // 所以我们只 update questionStats，不动 longTermErrors，除非用户手动删，或者我们设定一个阈值
+        // 为了体验，我们可以让它在"错题本模式"下，做对了就暂时从"本轮"移除，但 longTermErrors 列表保留。
+
+        // 如果想自动移除：
+        // const errIdx = longTermErrors.findIndex(e => e.question === qText);
+        // if (errIdx !== -1) { ... }
+        // 既然用户说"必须留着"，那就不删。用户可以在错题本模式里手动点"斩杀"。
+
+    } else if (type === 'wrong') {
+        stat.level = -1;
+        stat.isVague = false;
+        sessionStats.wrong++;
+        memoryState.nextRoundQueue.push(card);
+        handleLongTermError(card); // 更新错误计数
+        showToast("加入错题循环 🔴", "error");
+    } else if (type === 'vague') {
+        stat.isVague = true;
+        if (stat.level > 0) stat.level--;
+        memoryState.nextRoundQueue.push(card);
+        showToast("标记为模糊 🟡", "info");
+    }
+
+    saveQuestionStats();
+    sessionStats.total++;
+    memoryState.currentCard = null;
+    loadNextMemoryCard();
 }
-// ==========================================
-// 核心逻辑：秒开奖 + 异步 AI (完形填空版)
-// ==========================================
+
+// 更新错题本数据
+function handleLongTermError(q) {
+    const qText = q.question || q.q;
+    const aText = q.answer || q.a;
+    const idx = longTermErrors.findIndex(e => e.question === qText);
+
+    if (idx !== -1) {
+        longTermErrors[idx].count = (longTermErrors[idx].count || 1) + 1;
+        longTermErrors[idx].lastDate = new Date().toLocaleString();
+    } else {
+        longTermErrors.push({
+            question: qText,
+            answer: aText,
+            count: 1,
+            lastDate: new Date().toLocaleString(),
+            source: q.source || "Review"
+        });
+    }
+    localStorage.setItem("longTermErrors", JSON.stringify(longTermErrors));
+}
+
+// 🟢 启动错题本复习 (按错误率倒序)
+window.startReviewWrong = function () {
+    if (longTermErrors.length === 0) {
+        showToast("暂无错题记录，太强了！", "success");
+        return;
+    }
+
+    // 按错误次数倒序排列
+    const sortedErrors = [...longTermErrors].sort((a, b) => b.count - a.count);
+
+    // 启动 (true 表示 retryMode，不混入新题)
+    startMemoryGrinder(sortedErrors, true);
+    showToast(`已加载 ${sortedErrors.length} 道错题，按错误率排序`, "success");
+};
+
+async function handleMemoryRoundEnd() {
+    if (memoryState.nextRoundQueue.length === 0) {
+        await showConfirm(`🎉 本轮复习完成！\n所有题目已攻克。`);
+        // 结束后，清空当前session，回到大厅
+        localStorage.removeItem("memory_session");
+        memoryState.isActive = false;
+        toggleView("welcome");
+    } else {
+        const keepGoing = await showConfirm(`Round ${memoryState.round} 结束。\n还有 ${memoryState.nextRoundQueue.length} 道题没过。\n\n是否继续下一轮？`);
+        if (keepGoing) {
+            memoryState.queue = [...memoryState.nextRoundQueue];
+            memoryState.nextRoundQueue = [];
+            memoryState.round++;
+            memoryState.queue.sort(() => Math.random() - 0.5);
+            saveMemorySession();
+            loadNextMemoryCard();
+        } else {
+            // 用户选择“否”，此时保留进度，直接回大厅
+            toggleView("welcome");
+        }
+    }
+}
+
+// 🟢 退出按钮逻辑：只保存，不删除
+async function quitMemoryMode() {
+    // 自动保存
+    saveMemorySession();
+    showToast("进度已保存", "success");
+    toggleView("welcome");
+}
+
+function saveMemorySession() {
+    if (!memoryState.isActive) return;
+    localStorage.setItem("memory_session", JSON.stringify(memoryState));
+}
+
+function restoreMemorySession() {
+    const saved = localStorage.getItem("memory_session");
+    if (!saved) return;
+    try {
+        const session = JSON.parse(saved);
+        if (session.isActive) {
+            memoryState = session;
+            toggleView("memory");
+            if (memoryState.currentCard) renderMemoryCard(memoryState.currentCard);
+            else loadNextMemoryCard();
+        }
+    } catch (e) { localStorage.removeItem("memory_session"); }
+}
+
+/* ==========================================================================
+   6. AI 判题逻辑 (v5.0 - 列表宽容版)
+   ========================================================================== */
 async function revealMemoryAnswer() {
     const inputEl = document.getElementById("memory-input");
     const ansArea = document.getElementById("memory-answer-area");
@@ -543,104 +569,96 @@ async function revealMemoryAnswer() {
 
     const inputVal = inputEl ? inputEl.value.trim() : "";
     const card = memoryState.currentCard;
-
     if (!card) return;
 
-    // 1. 显示标准答案
-    if (ansArea) ansArea.style.display = "block";
-    if (answerTextEl) {
-        answerTextEl.innerHTML = card.a;
-        if (typeof renderMath === 'function') setTimeout(() => renderMath("memory-a-text"), 10);
-    }
+    ansArea.style.display = "block";
+    answerTextEl.innerHTML = card.answer || card.a;
+    setTimeout(() => renderMath("memory-a-text"), 50);
 
-    // 切换按钮
-    if (btnReveal) btnReveal.style.display = "none";
-    if (btnGroup) btnGroup.style.display = "flex";
-    if (inputEl) inputEl.disabled = true;
+    btnReveal.style.display = "none";
+    btnGroup.style.display = "flex";
+    inputEl.disabled = true;
 
-    // 2. AI 批改区域
-    if (aiBox && aiContent) {
-        aiBox.style.display = "block";
-        aiContent.innerHTML = `<div style="color:#64748b;">⏳ AI 正在帮你补全答案...</div>`;
+    aiBox.style.display = "block";
+    aiContent.innerHTML = `<div style="color:#64748b;">⏳ AI 正在阅卷...</div>`;
 
-        if (inputVal.length > 0) {
-            checkWithAI_Async(card.q, card.a, inputVal).then(aiResult => {
-                if (!aiResult) return;
+    if (inputVal.length > 0) {
+        checkWithAI_Async(card.question || card.q, card.answer || card.a, inputVal).then(aiResult => {
+            if (!aiResult) {
+                aiContent.innerHTML = "<span style='color:#cbd5e1'>API 请求失败</span>";
+                return;
+            }
 
-                let prettyHtml = aiResult.markup || inputVal;
+            let prettyHtml = aiResult.markup || inputVal;
+            prettyHtml = prettyHtml.replace(/\\\\([a-zA-Z]+)/g, "\\$1");
+            prettyHtml = prettyHtml.replace(/\\\\([{}])/g, "\\$1");
 
-                // 🟢 <ok>：语义正确 (哪怕词不一样) -> 绿色底
-                prettyHtml = prettyHtml.replace(/<ok>(.*?)<\/ok>/g,
-                    `<span style="color:#14532d; font-weight:bold; background:#dcfce7; border-bottom:2px solid #86efac; padding:0 2px; border-radius:2px;">$1</span>`);
+            prettyHtml = prettyHtml.replace(/<ok>(.*?)<\/ok>/g,
+                `<span style="color:#14532d; font-weight:bold; background:#dcfce7; border-bottom:2px solid #86efac; padding:0 2px; border-radius:2px;">$1</span>`);
+            prettyHtml = prettyHtml.replace(/<bad>(.*?)<\/bad>/g,
+                `<del style="color:#ef4444; text-decoration-thickness: 2px; margin:0 2px;">$1</del>`);
+            prettyHtml = prettyHtml.replace(/<(fill|miss)>(.*?)<\/(fill|miss)>/g,
+                `<span style="color:#6d28d9; font-weight:bold; background:#f3e8ff; border:1px solid #d8b4fe; border-radius:4px; margin:0 3px; padding:0 4px; font-size:0.9em; vertical-align: middle;">✚ $2</span>`);
 
-                // 🔴 <bad>：事实错误 -> 红色删除线
-                prettyHtml = prettyHtml.replace(/<bad>(.*?)<\/bad>/g,
-                    `<del style="color:#ef4444; text-decoration-thickness: 2px; margin:0 2px;">$1</del>`);
-
-                // 🟣 <fill>：完全遗漏的内容 -> 紫色胶囊样式 (带加号)
-                prettyHtml = prettyHtml.replace(/<(fill|miss)>(.*?)<\/(fill|miss)>/g,
-                    `<span style="color:#6d28d9; font-weight:bold; background:#f3e8ff; border:1px solid #d8b4fe; border-radius:4px; margin:0 3px; padding:0 4px; font-size:0.9em; vertical-align: middle;">✚ $2</span>`);
-                aiContent.innerHTML = `
-                    <div style="margin-bottom:8px; font-weight:bold; color:#334155;">🤖 批改结果：</div>
-                    <div style="font-size:1.1em; line-height:1.8; background:#fff; padding:15px; border-radius:8px; border:1px solid #e2e8f0; font-family:sans-serif;">
-                        ${prettyHtml}
-                    </div>
-                    <div style="margin-top:8px; font-size:0.9em; color:#64748b;">
-                        💡 评语: ${aiResult.reason}
-                    </div>
-                `;
-
-                // 渲染公式
-                if (typeof renderMath === 'function') renderMath("ai-feedback-content");
-
-            }).catch(err => {
-                console.error(err);
-                aiContent.innerHTML = "<span style='color:#cbd5e1'>AI 批改失败</span>";
-            });
-        } else {
-            aiContent.innerHTML = "😶 空白卷";
-        }
+            aiContent.innerHTML = `
+                <div style="margin-bottom:8px; font-weight:bold; color:#334155;">🤖 批改结果：</div>
+                <div style="font-size:1.1em; line-height:1.6; background:#fff; padding:15px; border-radius:8px; border:1px solid #e2e8f0;">${prettyHtml}</div>
+                <div style="margin-top:8px; font-size:0.9em; color:#64748b;">💡 ${aiResult.reason}</div>
+            `;
+            setTimeout(() => renderMath("ai-feedback-content"), 50);
+        });
+    } else {
+        aiContent.innerHTML = "😶 空白卷";
     }
 }
-// 核心逻辑
+/**
+ * AI 判题逻辑 v4.2 (最终封箱版)
+ * 特性：
+ * 1. 智能去重：识别"大于"等于">"，不再重复补充公式。
+ * 2. 智能熔断：胡说八道直接判错。
+ * 3. 极速响应：基于 Qwen-14B。
+ */
 async function checkWithAI_Async(question, standardAnswer, userAnswer) {
     if (!userApiKey) {
-        console.error("❌ 没有 API Key");
+        showToast("请先配置 API Key", "error");
         return null;
     }
 
-    // 1. 动态决定 URL
-    let apiUrl = "";
-    if (userModel && userModel.includes("gemini")) {
-        apiUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-        console.log("🚀 Google Gemini: ", userModel);
-    } else {
-        apiUrl = "https://api.siliconflow.cn/v1/chat/completions";
-        console.log("🚀 硅基流动: ", userModel);
-    }
+    const targetModel = "Qwen/Qwen2.5-14B-Instruct";
+    const apiUrl = "https://api.siliconflow.cn/v1/chat/completions";
 
-    // 🟢 极速版 Prompt (去油腻，去评语)
+    // 🟢 v5.2 Prompt: 强制 AI 进行“逐词清算”
     const prompt = `
-    【指令】对用户回答进行"嵌入式"补全。
-    
-    【输入】
-    题：${question}
-    标：${standardAnswer}
-    用：${userAnswer}
+    你是一个精准的阅卷助手。对比[标准答案]和[用户回答]。
 
-    【规则】
-    1. <ok>：标记用户写对的词（锚点）。
-    2. <fill>：在锚点**紧后方**插入遗漏的标准内容（定义/公式）。
-    3. **禁止追加**：严禁在句尾堆砌，必须嵌入句中。
-    4. **结构保留**：保留用户原话，仅做插入。
+    【核心原则：颗粒度判分】
+    不要一刀切！请对用户回答中的**每个词**单独判断：
+    1. **命中 (<ok>)**：意思准确或接近（如同义词 "操作"≈"行动"、"观察"≈"感知"），必须标绿！
+    2. **错误 (<bad>)**：完全不对的概念（如"反馈"），必须用删除线划掉！
+    3. **遗漏 (<fill>)**：标准答案有但用户没写的，在最后补充。
 
-    【示例】
-    标：g(.) 将预测值与真实标记联系。
-    生：套个非线性的联系函数。
-    输出：{"pass":true, "markup":"套个非线性的 <ok>联系函数</ok><fill>(作用: 将预测值与真实标记联系)</fill>。"}
+    【重要：只要有一个词是对的，就必须 pass:true！】
 
-    【输出JSON】
-    {"pass": boolean, "markup": "string"}
+    【输出 JSON 规则】
+    - 情况 A (混合): 对了一部分，错了一部分。
+      JSON: {"pass":true, "markup":"<ok>大脑</ok>、<bad>反馈</bad>、<ok>操作</ok><fill>(缺: 感知)</fill>"}
+    - 情况 B (全对): 
+      JSON: {"pass":true, "markup":"<ok>大脑</ok>、<ok>感知</ok>、<ok>行动</ok>"}
+    - 情况 C (全错/胡扯): 
+      JSON: {"pass":false, "markup":"<bad>用户原话</bad><br/>💡 标: ..."}
+
+    【示例教学 (你的痛点)】
+    标: 1.大脑 2.感知 3.行动
+    用: 大脑，操作，反馈
+    ✅ 正确: {"pass":true, "markup":"<ok>大脑</ok>、<ok>操作</ok><fill>(即行动)</fill>、<bad>反馈</bad><fill>(感知)</fill>"}
+    ❌ 错误: {"pass":false, "markup":"<bad>大脑，操作，反馈</bad>..."} (严禁把对的"大脑"也划掉！)
+
+    【当前任务】
+    题: ${question}
+    标: ${standardAnswer}
+    用: ${userAnswer}
+
+    请输出标准 JSON。
     `;
 
     try {
@@ -651,482 +669,372 @@ async function checkWithAI_Async(question, standardAnswer, userAnswer) {
                 "Authorization": `Bearer ${userApiKey}`
             },
             body: JSON.stringify({
-                model: userModel,
+                model: targetModel,
                 messages: [
-                    { role: "system", content: "JSON only." },
+                    { role: "system", content: "Output concise JSON." },
                     { role: "user", content: prompt }
                 ],
-                // 温度设为 0，让模型不做发散思考，专注执行
-                temperature: 0.05,
-                max_tokens: 400
+                temperature: 0.1,
+                max_tokens: 512
             })
         });
 
         if (!response.ok) return null;
+
         const data = await response.json();
         let content = data.choices[0].message.content;
 
-        content = content.replace(/```json/gi, "").replace(/```/g, "").trim();
+        // ============================================================
+        // 🛡️ 终极 JSON 洗地机 (专治 LaTeX 和 换行符)
+        // ============================================================
+
+        // 1. 剥离 Markdown 标记
+        content = content.replace(/```json|```/gi, "").trim();
+
+        // 2. 🚑 核心修复：处理 LaTeX 反斜杠灾难
+        // 逻辑：JSON 里的 \ 必须写成 \\。
+        // 如果我们遇到一个 \，且它后面跟的不是 JSON 规定的转义符 (" \ / b f n r t u)，
+        // 那它肯定就是 LaTeX 公式里的 \ (比如 \alpha)，我们要手动帮它加个 \
         content = content.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
 
-        // 🟢 容错处理：如果 AI 没返回 reason，我们前端自己补一个空字符串，防止报错
-        const result = JSON.parse(content);
-        if (!result.reason) result.reason = "AI 已完成批改 (极速模式)";
+        // 3. 🚑 核心修复：杀掉所有换行符
+        // JSON 字符串里绝对不能有真正的换行（回车），否则必挂。
+        // 我们把所有换行符都变成空格，反正 HTML 会自动折行。
+        content = content.replace(/[\r\n]+/g, " ");
+        content = content.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
 
-        return result;
+        try {
+            const result = JSON.parse(content);
+            if (!result.reason) result.reason = result.pass ? "✅ 回答精准" : "💡 建议复习标准答案";
+            return result;
+        } catch (e) {
+            console.warn("JSON修复:", content);
+            return {
+                pass: true,
+                markup: userAnswer,
+                reason: "AI 格式解析跳过"
+            };
+        }
 
     } catch (e) {
         console.error(e);
         return null;
     }
 }
-// type: 'correct' | 'wrong' | 'vague'
-function rateMemory(type) {
-    const card = memoryState.currentCard;
-    const stat = getStat(card.q);
-    stat.lastTime = Date.now();
-
-    if (type === 'correct') {
-        // ✅ 记住了：熟练度+1，模糊标记清除
-        stat.level++;
-        stat.isVague = false;
-        stats.correctCount++;
-        showToast("熟练度 +1 🆙", "success");
-
-        // 如果是从错题集里做对的，把错误记录消掉
-        const errIdx = longTermErrors.findIndex(e => e.question === card.q);
-        if (errIdx !== -1) {
-            longTermErrors.splice(errIdx, 1);
-            localStorage.setItem("longTermErrors", JSON.stringify(longTermErrors));
-        }
-
-    } else if (type === 'wrong') {
-        // ❌ 没记住：熟练度归零（或扣分），强制进入下一轮
-        stat.level = -1; // 变成负数表示“最近做错过”
-        stat.isVague = false;
-
-        memoryState.nextRoundQueue.push(card);
-        handleWrongAnswer({
-            question: card.q,
-            answer: card.a,
-            tag: "Memory",
-            source: card.source || "JSON"
-        });
-        showToast("已加入错题循环 🔴", "error");
-
-    } else if (type === 'vague') {
-        // 🤔 模糊：熟练度不变（或微降），标记为模糊，进入下一轮
-        stat.isVague = true;
-        if (stat.level > 0) stat.level--; // 稍微降一点级
-
-        memoryState.nextRoundQueue.push(card); // 模糊的也要再来一遍！
-        showToast("标记为模糊，稍后重试 🟡", "info");
-    }
-
-    // 保存状态
-    saveQuestionStats();
-
-    stats.totalAnswered++;
-    updateStatsUI();
-    memoryState.currentCard = null;
-    loadNextMemoryCard();
-}
-
-async function handleMemoryRoundEnd() {
-    if (memoryState.nextRoundQueue.length === 0) {
-        // 🟢 替换 alert -> confirm 模拟信息弹窗（只有一个确认逻辑）
-        await showConfirm(`🎉 太棒了！本组题目已全部攻克！\n总耗时 ${memoryState.round} 轮。`);
-        clearMemorySession();
-        quitMemoryMode();
-    } else {
-        // 🟢 替换 confirm
-        const keepGoing = await showConfirm(`第 ${memoryState.round} 轮结束。\n还有 ${memoryState.nextRoundQueue.length} 道硬骨头没啃下来。\n\n是否立即开始第 ${memoryState.round + 1} 轮死磕？`);
-
-        if (keepGoing) {
-            memoryState.queue = [...memoryState.nextRoundQueue];
-            memoryState.nextRoundQueue = [];
-            memoryState.round++;
-            memoryState.queue.sort(() => Math.random() - 0.5);
-            saveMemorySession();
-            loadNextMemoryCard();
-        } else {
-            quitMemoryMode();
-        }
-    }
-}
-
-async function quitMemoryMode() {
-    // 🟢 替换 confirm
-    const exit = await showConfirm("确定要退出背诵模式吗？\n(您的进度已自动保存，下次进来可以继续)");
-    if (exit) {
-        toggleView("csv");
-    }
-}
 
 /* ==========================================================================
-   事件绑定与工具
+   7. 设置与收藏 (Features)
    ========================================================================== */
-function setupEventListeners() {
-    // 侧边栏
-    document.getElementById("sidebar-toggle").onclick = () => document.getElementById("sidebar").classList.add("active");
-    document.querySelector(".sidebar-overlay").onclick = () => document.getElementById("sidebar").classList.remove("active");
-    document.querySelector(".close-sidebar").onclick = () => document.getElementById("sidebar").classList.remove("active");
-    document.getElementById("btn-select-all").onclick = () => {
-        document.querySelectorAll(".unit-checkbox").forEach(cb => cb.checked = true);
-        loadSelectedUnits();
-    };
-    document.getElementById("btn-clear-all").onclick = () => {
-        document.querySelectorAll(".unit-checkbox").forEach(cb => cb.checked = false);
-        loadSelectedUnits();
-    };
-
-    // CSV 交互
-    document.getElementById("btn-submit").onclick = checkCSVAnswer;
-    document.getElementById("btn-next").onclick = handleNextCSV;
-    document.getElementById("input-full").addEventListener("keyup", e => {
-        if (e.key === "Enter") document.getElementById("btn-submit").style.display !== "none" ? checkCSVAnswer() : handleNextCSV();
-    });
-
-    document.getElementById("btn-start-memory").onclick = startMemoryGrinder;
-
-    // 🟢 快捷键逻辑：背诵输入
-    document.getElementById("memory-input").addEventListener("keydown", (e) => {
-        if ((e.ctrlKey || e.metaKey) && (e.key === "Enter" || e.keyCode === 13)) {
-            const btnReveal = document.getElementById("btn-reveal");
-            if (btnReveal && btnReveal.style.display !== "none") {
-                e.preventDefault(); e.stopPropagation();
-                revealMemoryAnswer();
-            }
-        }
-    });
-
-    // 🟢 快捷键逻辑：判分
-    // ...
-    // 🟢 快捷键逻辑：判分
-    document.addEventListener("keydown", (e) => {
-        const memView = document.getElementById("view-memory");
-        const gradeGrp = document.getElementById("btn-grade-group");
-        const sysModal = document.getElementById("sys-modal");
-
-        if (memView.style.display !== "none" &&
-            gradeGrp.style.display !== "none" && // 注意这里改成不为 none 即可
-            sysModal.style.display === "none") {
-
-            if (e.key === "1") { e.preventDefault(); rateMemory('wrong'); }
-            if (e.key === "2") { e.preventDefault(); rateMemory('vague'); } // 新增按键 2
-            if (e.key === "3" || e.key === "Enter") {
-                if (!e.ctrlKey) { e.preventDefault(); rateMemory('correct'); }
-            }
-        }
-    });
-    // ...
-
-    document.getElementById("btn-fav").onclick = toggleFav;
-    document.getElementById("wrong-count").onclick = retryWrong;
-}
-
-// === Helpers ===
-async function fetchFile(url) { const res = await fetch(url); return new TextDecoder("utf-8").decode(await res.arrayBuffer()); }
-async function fetchJSON(url) { const res = await fetch(url); if (!res.ok) throw new Error(res.status); return await res.json(); }
-function parseCSV(text, src) {
-    return text.split(/\r?\n/)
-        .filter(l => l.trim() && !l.includes("正面"))
-        .map(l => {
-            const p = l.split(";");
-            return p.length >= 2 ? {
-                question: p[0].replace(/"/g, ''),
-                answer: p[1].replace(/"/g, ''),
-                tag: p[2] ? p[2].replace(/"/g, '') : "Def",
-                source: src
-            } : null
-        }).filter(x => x);
-}
-function extractKeywords(html) {
-    const r = /<b>(.*?)<\/b>/g;
-    const k = []; let m;
-    while (m = r.exec(html)) k.push(m[1].replace(/[.,:;，。：；]/g, "").trim());
-    return k;
-}
-
-// === 错题/收藏 ===
-function handleWrongAnswer(q) {
-    stats.wrongCount++; stats.sessionWrong.push(q);
-    const idx = longTermErrors.findIndex(x => x.question === q.question);
-    if (idx !== -1) {
-        longTermErrors[idx].count++;
-        longTermErrors[idx].lastDate = new Date().toLocaleString();
-    } else {
-        q.count = 1;
-        q.lastDate = new Date().toLocaleString();
-        longTermErrors.push(q);
-    }
-    localStorage.setItem("longTermErrors", JSON.stringify(longTermErrors));
-    updateStatsUI();
-}
-
 function toggleFav() {
-    let t = null;
-    const csvView = document.getElementById("view-csv");
-    if (csvView.style.display !== "none") t = currentQuestion;
-    else if (memoryState.currentCard) t = { question: memoryState.currentCard.q, answer: memoryState.currentCard.a, tag: "Memory", source: "JSON" };
+    if (!memoryState.currentCard) return;
+    const card = memoryState.currentCard;
+    const qText = card.question || card.q;
+    const idx = favorites.findIndex(x => x.question === qText);
 
-    if (!t) return;
-    const i = favorites.findIndex(x => x.question === t.question);
-    if (i !== -1) favorites.splice(i, 1);
-    else favorites.push(t);
+    if (idx !== -1) { favorites.splice(idx, 1); showToast("已取消收藏", "info"); }
+    else { favorites.push({ question: qText, answer: card.answer || card.a, source: card.source }); showToast("已收藏 ★", "success"); }
+
     localStorage.setItem("favorites", JSON.stringify(favorites));
     updateFavIcon();
-    showToast(i !== -1 ? "已取消收藏" : "已收藏", "info");
 }
 
 function updateFavIcon() {
-    let t = null;
-    const csvView = document.getElementById("view-csv");
-    if (csvView.style.display !== "none") t = currentQuestion;
-    else t = memoryState.currentCard ? { question: memoryState.currentCard.q } : null;
-
     const btn = document.getElementById("btn-fav");
-    if (t && favorites.some(x => x.question === t.question)) {
-        btn.style.color = "#fbbf24"; btn.innerText = "★";
-    } else {
-        btn.style.color = "#cbd5e1"; btn.innerText = "☆";
-    }
+    if (!btn || !memoryState.currentCard) return;
+    const qText = memoryState.currentCard.question || memoryState.currentCard.q;
+    const isFav = favorites.some(x => x.question === qText);
+    btn.innerText = isFav ? "★" : "☆";
+    btn.style.color = isFav ? "#fbbf24" : "#cbd5e1";
 }
 
-function updateStatsUI() {
-    document.getElementById("score-val").innerText = stats.correctCount + "/" + stats.totalAnswered;
-    const w = document.getElementById("wrong-count");
-    w.innerText = `❌ ${stats.wrongCount} (点击重测)`;
-    w.style.color = stats.sessionWrong.length > 0 ? "#ef4444" : "#64748b";
-}
-
-async function retryWrong() {
-    if (stats.sessionWrong.length === 0) { showToast("本次无错题", "info"); return; }
-
-    // 🟢 替换 confirm
-    const doRetry = await showConfirm(`确认重测本次的 ${stats.sessionWrong.length} 道错题吗？`);
-    if (doRetry) {
-        questionBank = [...stats.sessionWrong];
-        stats.sessionWrong = [];
-        stats.wrongCount = 0;
-        currentMode = "csv";
-        toggleView("csv");
-        startCSVQuiz();
-    }
-}
-// ==========================================
-// 设置与 API Key 管理
-// ==========================================
-// ==========================================
-// 设置与 API Key 管理 (Toast 优化版)
-// ==========================================
-// ==========================================
-// ⚙️ 设置与模型管理 (升级版)
-// ==========================================
-
-window.openSettingsModal = function () {
+function openSettingsModal() {
     const modal = document.getElementById("settings-modal");
     const input = document.getElementById("api-key-input");
-    const status = document.getElementById("api-key-status");
-    const modelSelect = document.getElementById("model-select"); // 获取下拉框
-
+    const modelSelect = document.getElementById("model-select");
     if (!modal || !input) return;
+
     modal.style.display = "flex";
+    input.value = userApiKey || "";
+    if (modelSelect) modelSelect.value = userModel;
 
-    // 1. 回显 API Key 状态
-    if (userApiKey) {
-        input.value = userApiKey;
-        if (status) {
-            status.style.display = "block";
-            status.innerHTML = "<span style='color:#16a34a'>✅ 当前已配置 Key</span>";
-        }
-    } else {
-        input.value = "";
-        if (status) status.style.display = "none";
-    }
+    const status = document.getElementById("api-key-status");
+    if (status) status.style.display = userApiKey ? "block" : "none";
+}
 
-    // 2. 🟢 回显当前选择的模型
-    if (modelSelect) {
-        modelSelect.value = userModel; // 自动选中上次存的模型
-    }
-};
-
-window.saveApiKey = function () {
+function saveApiKey() {
     const input = document.getElementById("api-key-input");
+    const val = input.value.trim();
     const modelSelect = document.getElementById("model-select");
 
-    let val = input.value.trim();
+    if (!val) { showToast("Key 不能为空", "error"); return; }
+    if (!val.startsWith("sk-")) showToast("提示: 硅基流动 Key 通常以 sk- 开头", "info");
 
-    // 1. 获取当前选中的模型
-    // 如果还没加载出来下拉框，默认它是硅基流动
-    const selectedModel = modelSelect ? modelSelect.value : "Qwen/Qwen2.5-7B-Instruct";
-
-    // 2. 基础非空校验
-    if (!val) {
-        showToast("Key 不能为空", "error");
-        return;
-    }
-
-    // 🟢 3. 智能格式校验 (核心修复点)
-    if (selectedModel.includes("gemini")) {
-        // --- Google Gemini 模式 ---
-        // Google 的 Key 通常以 AIza 开头
-        if (!val.startsWith("AIza")) {
-            showToast("Google Key 通常以 AIza 开头，请检查复制是否完整", "info");
-            // 这里我们只提示，不return，防止万一Google改规则了导致没法保存
-        }
-    } else {
-        // --- 硅基流动 (SiliconFlow) 模式 ---
-        // SiliconFlow 的 Key 必须以 sk- 开头
-        if (!val.startsWith("sk-")) {
-            showToast("硅基流动 Key 必须以 sk- 开头", "error");
-            return; // 硅基流动的格式很死，不对直接拦截
-        }
-    }
-
-    // 4. 更新变量并保存
     userApiKey = val;
-    userModel = selectedModel;
-
+    userModel = modelSelect ? modelSelect.value : "Qwen/Qwen2.5-14B-Instruct";
     localStorage.setItem("sf_api_key", userApiKey);
     localStorage.setItem("sf_user_model", userModel);
 
-    // 5. 界面反馈
-    // 这一步很重要，让用户确认自己切到了哪个厂商
-    const providerName = selectedModel.includes("gemini") ? "Google Gemini" : "硅基流动";
-    showToast(`保存成功！已切换至: ${providerName}`, "success");
-
+    showToast("保存成功", "success");
     closeSettingsModal();
-};
+}
 
 function closeSettingsModal() {
     const modal = document.getElementById("settings-modal");
     if (modal) modal.style.display = "none";
 }
 
-function saveApiKey() {
+function toggleKeyVisibility() {
     const input = document.getElementById("api-key-input");
-    const val = input.value.trim();
+    if (input) input.type = input.type === "password" ? "text" : "password";
+}
 
-    // 🟢 改动点：空值检查用 Toast
-    if (!val) {
-        showToast("Key 不能为空", "error");
+/* ==========================================================================
+   8. 事件绑定 (Event Listeners)
+   ========================================================================== */
+function setupEventListeners() {
+    const toggleBtn = document.getElementById("sidebar-toggle");
+    if (toggleBtn) toggleBtn.onclick = () => document.getElementById("sidebar").classList.add("active");
+
+    const closeBtns = document.querySelectorAll(".close-sidebar, .sidebar-overlay");
+    closeBtns.forEach(btn => btn.onclick = () => document.getElementById("sidebar").classList.remove("active"));
+
+    const unitList = document.getElementById("unit-list");
+    if (unitList) {
+        unitList.addEventListener("change", (e) => {
+            if (e.target.classList.contains("unit-checkbox")) updateSelectionStats();
+        });
+    }
+
+    const selAll = document.getElementById("btn-select-all");
+    if (selAll) selAll.onclick = () => {
+        document.querySelectorAll(".unit-checkbox").forEach(cb => cb.checked = true);
+        updateSelectionStats();
+    };
+
+    const clrAll = document.getElementById("btn-clear-all");
+    if (clrAll) clrAll.onclick = () => {
+        document.querySelectorAll(".unit-checkbox").forEach(cb => cb.checked = false);
+        updateSelectionStats();
+    };
+
+    const btnLaunch = document.getElementById("btn-launch");
+    if (btnLaunch) btnLaunch.onclick = launchReview;
+
+    const btnReveal = document.getElementById("btn-reveal");
+    if (btnReveal) btnReveal.onclick = revealMemoryAnswer;
+
+    const btnFav = document.getElementById("btn-fav");
+    if (btnFav) btnFav.onclick = toggleFav;
+
+    document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === "Enter" || e.keyCode === 13)) {
+            const btn = document.getElementById("btn-reveal");
+            if (btn && btn.style.display !== "none") {
+                e.preventDefault();
+                revealMemoryAnswer();
+            }
+            return;
+        }
+        const gradeGrp = document.getElementById("btn-grade-group");
+        if (gradeGrp && gradeGrp.style.display !== "none") {
+            if (e.key === "1") { e.preventDefault(); rateMemory('wrong'); }
+            if (e.key === "2") { e.preventDefault(); rateMemory('vague'); }
+            if (e.key === "3" || e.key === "Enter") {
+                e.preventDefault(); rateMemory('correct');
+            }
+        }
+    });
+}
+
+/* ==========================================================================
+   9. 暴露全局函数
+   ========================================================================== */
+/* ==========================================================================
+10. 数据备份与恢复 (Data Backup)
+========================================================================== */
+
+// 📤 导出数据
+window.exportData = function () {
+    const data = {
+        version: "1.0",
+        date: new Date().toLocaleString(),
+        stats: localStorage.getItem("sf_question_stats"), // 熟练度
+        errors: localStorage.getItem("longTermErrors"),   // 错题本
+        favorites: localStorage.getItem("favorites"),     // 收藏夹
+        apiKey: localStorage.getItem("sf_api_key"),       // Key (可选)
+        model: localStorage.getItem("sf_user_model")      // 模型设置
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ZJUCSE_Review_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast("备份已下载 📥", "success");
+};
+
+// 📥 导入数据
+window.importData = function (input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+        try {
+            const data = JSON.parse(e.target.result);
+
+            // 简单校验
+            if (!data.stats && !data.errors) {
+                throw new Error("文件格式不对");
+            }
+
+            const confirmImport = await showConfirm(`检测到备份文件 (${data.date})。\n导入将【覆盖】当前的错题本和熟练度。\n确定要导入吗？`);
+
+            if (confirmImport) {
+                if (data.stats) localStorage.setItem("sf_question_stats", data.stats);
+                if (data.errors) localStorage.setItem("longTermErrors", data.errors);
+                if (data.favorites) localStorage.setItem("favorites", data.favorites);
+                if (data.apiKey) localStorage.setItem("sf_api_key", data.apiKey);
+                if (data.model) localStorage.setItem("sf_user_model", data.model);
+
+                showToast("数据恢复成功！正在刷新...", "success");
+                setTimeout(() => location.reload(), 1000);
+            }
+        } catch (err) {
+            showToast("导入失败: " + err.message, "error");
+        }
+        // 清空 input 防止重复触发
+        input.value = "";
+    };
+    reader.readAsText(file);
+};
+/* ==========================================================================
+   11. 错题本列表管理 (Mistake List Logic)
+   ========================================================================== */
+
+// 🟢 改写：现在的入口改为“打开弹窗”
+window.startReviewWrong = function () {
+    if (longTermErrors.length === 0) {
+        showToast("暂无错题记录，太强了！", "success");
+        return;
+    }
+    openMistakeModal();
+};
+
+function openMistakeModal() {
+    const modal = document.getElementById("mistake-modal");
+    const list = document.getElementById("mistake-list");
+    const statsText = document.getElementById("mistake-stats-text");
+
+    if (!modal || !list) return;
+
+    // 按错误次数倒序排列
+    const sortedErrors = [...longTermErrors].sort((a, b) => b.count - a.count);
+
+    list.innerHTML = "";
+    statsText.innerText = `共 ${sortedErrors.length} 道错题`;
+
+    sortedErrors.forEach((err, index) => {
+        const div = document.createElement("div");
+        div.className = "mistake-item";
+
+        // 颜色逻辑：3次以上为高危(high)，否则为低危(low)
+        const riskClass = err.count >= 3 ? "high" : "low";
+        const riskLabel = err.count >= 3 ? "🔥 高频" : "⚠️ 需注意";
+
+        // 点击整行触发勾选
+        div.onclick = (e) => {
+            if (e.target.type !== 'checkbox') {
+                const cb = document.getElementById(`mis-${index}`);
+                cb.checked = !cb.checked;
+            }
+        };
+
+        div.innerHTML = `
+            <input type="checkbox" id="mis-${index}" class="mistake-checkbox" value="${err.question}" checked>
+            <div class="mistake-content">
+                <div class="mistake-q">${err.question}</div>
+                <div class="mistake-meta">
+                    <span class="error-badge ${riskClass}">错误 ${err.count} 次</span>
+                    <span>• ${err.source || "未知来源"}</span>
+                    <span>• 上次: ${err.lastDate.split(' ')[0] || "-"}</span>
+                </div>
+            </div>
+        `;
+        list.appendChild(div);
+    });
+
+    modal.style.display = "flex";
+}
+
+window.closeMistakeModal = function () {
+    document.getElementById("mistake-modal").style.display = "none";
+};
+
+// 全选/清空
+window.toggleSelectMistakes = function (selectAll) {
+    document.querySelectorAll(".mistake-checkbox").forEach(cb => cb.checked = selectAll);
+};
+
+// ⚔️ 启动复习 (只复习勾选的)
+window.launchMistakeReview = function () {
+    const checked = document.querySelectorAll(".mistake-checkbox:checked");
+    if (checked.length === 0) {
+        showToast("请至少选择一道题", "info");
         return;
     }
 
-    // 🟢 改动点：格式警告用 Toast，且不阻止保存 (万一以后格式变了呢)
-    if (!val.startsWith("sk-")) {
-        showToast("格式提示：Key 通常以 sk- 开头", "info");
-    }
+    const selectedQTexts = Array.from(checked).map(cb => cb.value);
 
-    userApiKey = val;
-    localStorage.setItem("sf_api_key", userApiKey);
+    // 从 longTermErrors 里找出对应的完整题目对象
+    const targetQuestions = longTermErrors.filter(err => selectedQTexts.includes(err.question));
 
-    // 🟢 改动点：保存成功用 Toast，而不是 alert
-    showToast("API Key 保存成功！", "success");
-    closeSettingsModal();
-}
+    // 关闭弹窗
+    closeMistakeModal();
+    // 收起侧边栏（以防万一）
+    document.getElementById("sidebar").classList.remove("active");
 
-// === 历史错题/导出 (功能保持，但加上 🟢 替换) ===
-window.exportGlobalData = function () {
-    const data = { favorites, longTermErrors, timestamp: new Date().toISOString() };
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-    a.download = `backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    showToast("备份导出成功", "success");
+    // 启动引擎
+    startMemoryGrinder(targetQuestions, true);
+    showToast(`开始复习 ${targetQuestions.length} 道错题`, "success");
 };
 
-window.importGlobalData = function (input) {
-    const f = input.files[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = e => {
-        try {
-            const d = JSON.parse(e.target.result);
-            if (d.favorites) favorites = d.favorites;
-            if (d.longTermErrors) longTermErrors = d.longTermErrors;
-            localStorage.setItem("favorites", JSON.stringify(favorites));
-            localStorage.setItem("longTermErrors", JSON.stringify(longTermErrors));
-            showToast("导入成功", "success");
-        } catch (err) { showToast("格式错误", "error"); }
-    };
-    r.readAsText(f);
-};
+// 🗑️ 移除选中的错题 (斩杀)
+window.deleteSelectedMistakes = async function () {
+    const checked = document.querySelectorAll(".mistake-checkbox:checked");
+    if (checked.length === 0) return;
 
-// 🟢 替换清空历史错题
-window.clearLongTermErrors = async () => {
-    if (await showConfirm("确定清空所有历史错题记录吗？")) {
-        longTermErrors = [];
-        localStorage.setItem("longTermErrors", "[]");
-        reviewLongTermErrors();
-        showToast("记录已清空", "success");
-    }
-};
+    const confirmDel = await showConfirm(`确定要将这 ${checked.length} 道题移出错题本吗？\n(熟练度不会受到影响)`);
+    if (!confirmDel) return;
 
-// 🟢 替换重置进度
-window.clearData = async () => {
-    if (await showConfirm("确定重置本次会话进度？(不影响收藏和历史)")) {
-        stats = { totalAnswered: 0, correctCount: 0, wrongCount: 0, sessionWrong: [] };
-        updateStatsUI();
-        showToast("会话已重置", "success");
-    }
-};
+    const selectedQTexts = Array.from(checked).map(cb => cb.value);
 
-// 保留辅助函数
-window.reviewLongTermErrors = function () {
-    const m = document.getElementById("error-modal"); m.style.display = "block";
-    const l = document.getElementById("error-list-container"); l.innerHTML = "";
-    longTermErrors.sort((a, b) => b.count - a.count).forEach(e => {
-        const d = document.createElement("div"); d.style = "border-bottom:1px solid #eee;padding:10px;";
-        d.innerHTML = `<div style="font-weight:bold;color:#ef4444">❌ ${e.count}次</div><div>${e.question}</div><div style="color:#666;font-size:0.9em">${e.answer}</div>`;
-        l.appendChild(d);
-    });
-};
-window.closeErrorModal = () => document.getElementById("error-modal").style.display = "none";
-window.startLongTermReviewMode = () => { if (longTermErrors.length) { questionBank = [...longTermErrors]; closeErrorModal(); toggleView("csv"); startCSVQuiz(); } };
-window.reviewSessionErrors = retryWrong;
-window.showErrorAnalysis = () => showToast(`历史错题: ${longTermErrors.length} / 收藏: ${favorites.length}`, "info");
+    // 过滤掉选中的
+    longTermErrors = longTermErrors.filter(err => !selectedQTexts.includes(err.question));
+    localStorage.setItem("longTermErrors", JSON.stringify(longTermErrors));
 
-document.getElementById("btn-view-fav").onclick = () => {
-    if (!favorites.length) { showToast("收藏夹为空", "info"); return; }
-    questionBank = [...favorites]; toggleView("csv"); startCSVQuiz(); document.getElementById("sidebar").classList.remove("active");
-};
-// ==========================================
-// 🩹 最终修复补丁 (追加到 script.js 末尾)
-// ==========================================
+    showToast(`已移除 ${checked.length} 道题`, "success");
 
-// 1. 修复 toggleKeyVisibility 报错 (找回丢失的小眼睛功能)
-window.toggleKeyVisibility = function () {
-    const input = document.getElementById("api-key-input");
-    if (input) {
-        input.type = input.type === "password" ? "text" : "password";
-    }
-};
-
-// 2. 修复设置弹窗逻辑
-window.openSettingsModal = function () {
-    const modal = document.getElementById("settings-modal");
-    const input = document.getElementById("api-key-input");
-    const status = document.getElementById("api-key-status");
-
-    if (!modal || !input) return;
-    modal.style.display = "flex";
-
-    // 读取并显示当前的 Key
-    if (userApiKey) {
-        input.value = userApiKey;
-        if (status) {
-            status.style.display = "block";
-            status.innerHTML = "<span style='color:#16a34a'>✅ 当前已配置 Key</span>";
-        }
+    // 刷新列表
+    if (longTermErrors.length === 0) {
+        closeMistakeModal();
+        updateLobbyUI(); // 刷新大厅计数
     } else {
-        input.value = "";
-        if (status) status.style.display = "none";
+        openMistakeModal(); // 重新渲染列表
     }
 };
-
-window.closeSettingsModal = function () {
-    const modal = document.getElementById("settings-modal");
-    if (modal) modal.style.display = "none";
-};
-
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.saveApiKey = saveApiKey;
+window.toggleKeyVisibility = toggleKeyVisibility;
+window.quitMemoryMode = quitMemoryMode;
+window.revealMemoryAnswer = revealMemoryAnswer;
+window.rateMemory = rateMemory;
+window.continueSession = continueSession;
+window.startReviewWrong = startReviewWrong;

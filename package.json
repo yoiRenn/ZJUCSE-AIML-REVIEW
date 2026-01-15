@@ -1,8 +1,8 @@
 {
   "name": "zjucse-aiml-review",
   "productName": "人机复习",
-  "version": "4.0.0",
-  "description": "基于PPT与大模型创建的题库，使用api调用大模型富文本修正答案，包含错题收藏等功能，新增问答题，优化弹窗，优化大小写",
+  "version": "10.0.0",
+  "description": "【最终优化版本】基于PPT与大模型创建的题库，使用api调用大模型富文本修正答案，包含错题收藏等功能，新增问答题，优化弹窗，优化大小写",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -10,7 +10,8 @@
   },
   "keywords": [
     "zjucse",
-    "aiml"
+    "aiml",
+    "ÖßRen"
   ],
   "author": "ÖßRen",
   "license": "ISC",

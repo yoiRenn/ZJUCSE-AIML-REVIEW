@@ -7,286 +7,213 @@
     <title>ZJUCSE AI&ML REVIEW</title>
     <link rel="icon" href="icon.ico">
     <link rel="stylesheet" href="style.css">
+
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 
 <body>
-    <div id="sidebar-toggle" class="bookmark-btn" title="打开菜单">
-        📖 章节 & 收藏
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>📚 题库选择</h2>
+            <button class="close-sidebar">&times;</button>
+        </div>
+
+        <div class="unit-list" id="unit-list">
+        </div>
+        <div style="padding: 0 20px 10px 20px;">
+            <div style="font-size:0.85rem; color:#64748b; margin-bottom:8px; font-weight:bold;">📦 数据备份</div>
+            <div class="btn-group">
+                <button onclick="exportData()" class="btn-outline" style="font-size:0.9rem;">📤 导出进度</button>
+                <button onclick="document.getElementById('import-file').click()" class="btn-outline"
+                    style="font-size:0.9rem;">📥 导入</button>
+                <input type="file" id="import-file" style="display:none" accept=".json" onchange="importData(this)">
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <div id="selection-stats" style="font-size:0.9em; color:#64748b; margin-bottom:10px;">
+                已选 0 章 / 0 题
+            </div>
+            <div class="btn-group">
+                <button id="btn-select-all" class="btn-outline">全选</button>
+                <button id="btn-clear-all" class="btn-outline">清空</button>
+            </div>
+            <button id="btn-launch" class="btn-primary"
+                style="width:100%; margin-top:10px; font-size:1.1em; padding:12px;">
+                🚀 开始死磕
+            </button>
+        </div>
     </div>
-    <div class="container">
-        <h1 class="app-title">ZJUCSE AI&ML REVIEW</h1>
-        <p class="subtitle">von ÖßRen<img src="icon.ico" alt="Icon" class="subtitle-icon"></p>
-        <header class="header">
-            <div class="stats-box">
-                <span>📚 <span id="q-unit">Loading...</span></span>
-                <span>🎯 <span id="score-val">0</span></span>
-                <span id="wrong-count" class="clickable" onclick="retryWrong()">❌ 0 (点击重测)</span>
-            </div>
-            <div class="settings-box">
-                <button onclick="clearData()" class="btn-small">🗑️ 重置进度</button>
-            </div>
-        </header>
+    <div class="sidebar-overlay"></div>
 
-        <main class="card">
-            <div class="card-tag" id="q-tag">CONCEPT</div>
-            <div id="btn-fav" style="cursor:pointer; font-size:1.5em; color:#cbd5e1;" title="收藏此题">★</div>
-
-            <div id="view-csv">
-                <div class="question-area">
-                    <div id="q-main" class="q-text">Ready?</div>
-                    <div id="q-sub" class="q-sub-text">请在左侧选择章节...</div>
-                </div>
-
-                <div class="interaction-area">
-                    <input type="text" id="input-full" class="main-input" placeholder="输入答案，多个关键词用空格隔开..."
-                        autocomplete="off">
-
-                    <div class="btn-group">
-                        <button id="btn-submit" class="btn-primary">确认 (Enter)</button>
-                        <button id="btn-next" class="btn-secondary" style="display:none;">下一题 (Enter)</button>
-
-                        <button id="btn-start-memory" class="btn-primary" style="display:none; background: #ef4444;">
-                            🚀 启动背诵粉碎机
-                        </button>
-                    </div>
-                </div>
-
-                <div id="result-area" class="result" style="display:none;"></div>
-                <div id="info-area" class="info-box" style="display:none;">
-                    <div class="info-label">📝 完整知识点：</div>
-                    <div id="info-content" class="info-content"></div>
-                </div>
-            </div>
-
-            <div id="view-memory" style="display:none;">
-                <div
-                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
-                    <span style="font-weight:800; color:#ef4444;" id="memory-round-display">Round 1</span>
-                    <div style="font-size:0.9em; color:#64748b;">
-                        剩余: <b id="memory-remain" style="color:#ef4444">0</b>
-                        <button onclick="quitMemoryMode()"
-                            style="margin-left:10px; padding:4px 8px; border:1px solid #cbd5e1; background:white; border-radius:4px; cursor:pointer;">💾
-                            退出并保存</button>
-                    </div>
-                </div>
-
-                <div class="question-area" style="margin: 10px 0;">
-                    <div id="memory-q-text" class="q-text" style="font-size:1.3em;">Loading...</div>
-                </div>
-
-                <div id="memory-input-wrapper">
-                    <textarea id="memory-input" class="memory-textarea"
-                        placeholder="在此默写关键点... (Ctrl + Enter 开奖)"></textarea>
-                </div>
-
-                <div id="memory-answer-area" class="memory-card answer-card" style="display:none; margin-top:20px;">
-                    <div class="memory-label" style="color:#059669;">✅ 标准答案</div>
-                    <div id="memory-a-text" class="memory-text" style="font-size:1.1em; color:#064e3b;"></div>
-                    <div id="ai-feedback-box"
-                        style="display:none; margin-top:15px; padding-top:10px; border-top:1px dashed #6ee7b7; font-size:0.9em; color:#047857;">
-                        <span style="font-weight:bold;">🤖 AI 补充:</span> <span id="ai-feedback-content">分析中...</span>
-                    </div>
-                </div>
-
-                <div style="margin-top: 20px;">
-                    <button id="btn-reveal" class="btn-primary" style="width:100%; padding:15px; background:#3b82f6;"
-                        onclick="revealMemoryAnswer()">
-                        👀 开奖 (Ctrl + Enter)
-                    </button>
-
-                    <div id="btn-grade-group" style="display:none; width:100%; gap:15px;">
-                        <button class="btn-sidebar btn-red"
-                            style="flex:1; justify-content:center; align-items:center; background:#fee2e2; color:#991b1b;"
-                            onclick="rateMemory(false)">
-                            <span style="font-weight:bold;">❌ 没记住 / 留下</span>
-                            <span style="font-size:0.8em; opacity:0.8;">(按 1)</span>
-                        </button>
-                        <button class="btn-sidebar btn-gold"
-                            style="flex:1; justify-content:center; align-items:center; background:#fef3c7; color:#92400e;"
-                            onclick="rateMemory(true)">
-                            <span style="font-weight:bold;">✅ 记住了 / 移除</span>
-                            <span style="font-size:0.8em; opacity:0.8;">(按 Enter)</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-        </main>
-
-        <div id="sidebar" class="sidebar">
-            <div class="sidebar-header">
-                <h3>功能菜单</h3>
-                <span class="close-sidebar" onclick="toggleSidebar()">×</span>
-            </div>
-            <hr class="sidebar-divider">
-            <div class="sidebar-section">
-                <h4 class="section-title">⚙️ 系统设置</h4>
-                <div class="sidebar-btn-group-vertical">
-                    <button class="btn-sidebar btn-gray" onclick="openSettingsModal()">
-                        🔑 配置 API Key
-                    </button>
-                </div>
-            </div>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-section">
-                <h4 class="section-title">🚫 错题管理</h4>
-                <div class="sidebar-btn-group-vertical">
-                    <button id="btn-session-wrong" class="btn-sidebar btn-outline" onclick="reviewSessionErrors()">
-                        <span class="btn-text">↺ 本次错题</span>
-                        <span id="session-badge" class="badge-count" style="display:none;">0</span>
-                    </button>
-
-                    <button id="btn-longterm-wrong" class="btn-sidebar btn-outline" onclick="reviewLongTermErrors()">
-                        <span class="btn-text">📅 历史错题本</span>
-                    </button>
-
-                    <button id="btn-analysis" class="btn-sidebar btn-gray" onclick="showErrorAnalysis()">
-                        <span class="btn-text">🧠 错误分析报告</span>
-                    </button>
-                </div>
-            </div>
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-section">
-                <h4 class="section-title">💾 数据备份 & 恢复</h4>
-                <div class="sidebar-btn-group-vertical">
-                    <button class="btn-sidebar btn-outline" onclick="exportGlobalData()">
-                        📤 导出当前进度 (.json)
-                    </button>
-
-                    <button class="btn-sidebar btn-outline" onclick="document.getElementById('import-file').click()">
-                        📥 导入备份文件
-                    </button>
-                    <input type="file" id="import-file" style="display:none" accept=".json"
-                        onchange="importGlobalData(this)">
-                </div>
-            </div>
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-section">
-                <h4 class="section-title">📚 章节选择</h4>
-
-                <div style="margin-bottom: 10px; padding: 0 5px;">
-                    <select id="category-select" class="main-input"
-                        style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; background-color: #fff;">
-                    </select>
-                </div>
-
-                <div class="sidebar-btn-group-row">
-                    <button id="btn-select-all" class="btn-sidebar btn-outline">全选</button>
-                    <button id="btn-clear-all" class="btn-sidebar btn-outline">清空</button>
-                </div>
-                <div id="unit-list" class="unit-list"></div>
+    <div class="main-content">
+        <div class="top-bar">
+            <button id="sidebar-toggle">☰ 章节</button>
+            <h1 class="app-title">ZJUCSE AI&ML REVIEW </h1>
+            <div class="top-actions">
+                <button onclick="openSettingsModal()">⚙️ 设置</button>
             </div>
         </div>
 
-        <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
-    </div>
-    </div>
-    <div id="error-modal" class="modal" style="display:none;">
-        <div class="modal-content large-modal">
-            <div class="modal-header">
-                <h3>📅 历史错题本 <small style="font-size:0.6em; color:#666;">(按错误频次排序)</small></h3>
-                <span class="close-btn" onclick="closeErrorModal()">&times;</span>
+        <div id="view-welcome" class="view-section">
+            <div id="api-warning-banner" class="warning-banner" onclick="openSettingsModal()" style="display:none;">
+                ⚠️ 尚未配置 API Key，AI 无法阅卷！<span style="text-decoration:underline; margin-left:5px;">点击配置</span>
             </div>
+            <div class="lobby-container">
+                <img src="icon.ico" class="lobby-icon" alt="App Logo">
+                <h2>人机复习助手</h2>
+                <p class="subtitle">von ÖßRen</p>
 
-            <div class="modal-body">
-                <div id="error-list-container" class="error-list-flat"></div>
-            </div>
+                <div class="lobby-actions">
+                    <button id="btn-continue" class="btn-lobby btn-continue" style="display:none;"
+                        onclick="continueSession()">
+                        <span class="lobby-btn-icon">⏯️</span>
+                        <div class="lobby-btn-text">
+                            <span class="main-text">继续上次进度</span>
+                            <span class="sub-text" id="continue-info">Round 1 | 剩余 0</span>
+                        </div>
+                    </button>
 
-            <div class="modal-footer"
-                style="padding-top: 15px; border-top: 1px solid #eee; display:flex; justify-content:flex-end; gap:10px;">
-                <button class="btn-sidebar btn-outline" onclick="closeErrorModal()">关闭</button>
-                <button class="btn-sidebar btn-red" onclick="clearLongTermErrors()">🗑️ 清空记录</button>
-                <button class="btn-sidebar btn-gold" onclick="startLongTermReviewMode()">🚀 开始针对复习</button>
-            </div>
-        </div>
-    </div>
-    <div id="fav-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>★ 收藏夹清单</h3>
-                <span class="close-btn" onclick="closeFavModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <table id="fav-table" style="width:100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background:#f1f5f9; text-align:left;">
-                            <th style="padding:8px;">语境 (题目)</th>
-                            <th style="padding:8px; width:120px;">关键词</th>
-                            <th style="padding:8px; width:60px;">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="fav-table-body">
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div id="settings-modal" class="modal" style="display:none; z-index: 3001;">
-        <div class="modal-content" style="max-width: 400px;">
-            <div class="modal-header">
-                <h3>⚙️ API 设置</h3>
-                <span class="close-btn" onclick="closeSettingsModal()">&times;</span>
-            </div>
-            <div class="modal-body" style="padding: 20px;">
-                <p style="font-size: 0.9em; color: #64748b; margin-bottom: 10px;">
-                    请输入硅基流动 (SiliconFlow) 的 API Key。
-                    <br>Key 将仅存储在您的手机本地。
-                </p>
+                    <button id="btn-new-game" class="btn-lobby"
+                        onclick="document.getElementById('sidebar').classList.add('active')">
+                        <span class="lobby-btn-icon">📚</span>
+                        <div class="lobby-btn-text">
+                            <span class="main-text">章节选择</span>
+                            <span class="sub-text">开启新一轮复习</span>
+                        </div>
+                    </button>
 
-                <div style="position: relative;">
-                    <input type="password" id="api-key-input" class="main-input" placeholder="sk-xxxxxxxxxxxxxxxx..."
-                        style="width: 100%; padding-right: 40px; font-family: monospace;">
-                    <span onclick="toggleKeyVisibility()"
-                        style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; opacity: 0.6;">
-                        👁️
-                    </span>
-                </div>
-
-                <div id="api-key-status" style="margin-top: 10px; font-size: 0.85em; color: #16a34a; display: none;">
-                    ✅ 已检测到本地存储的 Key
-                </div>
-                <div style="margin-top: 20px;">
-                    <p style="font-size: 0.9em; color: #64748b; margin-bottom: 8px;">🤖 选择 AI 模型 (Model)</p>
-                    <select id="model-select" class="main-input"
-                        style="width: 100%; padding: 10px; border-radius: 8px; background: #fff;">
-                        <option value="Qwen/Qwen3-8B">Qwen 2.5 8B (⚡ 极速/免费)</option>
-
-                        <option value="deepseek-ai/DeepSeek-V3.2">DeepSeek V3.2 (🧠 深度思考/推荐)</option>
-
-                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (谷歌/免费快)</option>
-                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (谷歌/免费强)</option>
-                    </select>
-                    <p style="font-size: 0.8em; color: #94a3b8; margin-top: 5px;">* "狠货"模型会消耗余额，但判题更准。</p>
+                    <button id="btn-mistakes" class="btn-lobby btn-mistake" onclick="startReviewWrong()">
+                        <span class="lobby-btn-icon">🔥</span>
+                        <div class="lobby-btn-text">
+                            <span class="main-text">死磕错题本</span>
+                            <span class="sub-text" id="mistake-info">暂无错题</span>
+                        </div>
+                    </button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-sidebar btn-gray" onclick="closeSettingsModal()">取消</button>
-                <button class="btn-primary" onclick="saveApiKey()">💾 保存配置</button>
-            </div>
         </div>
-    </div>
-    <div id="sys-modal" class="modal" style="display:none; z-index: 3000;">
-        <div class="modal-content" style="max-width: 400px; text-align: center;">
-            <div class="modal-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;">
-                <h3 id="sys-modal-title" style="font-size: 1.2rem;">提示</h3>
+
+        <div id="view-memory" class="view-section" style="display: none;">
+            <div class="status-bar">
+                <span id="memory-round-display" class="badge">Round 1</span>
+                <span id="q-tag" class="badge tag-badge">Concept</span>
+                <span class="spacer"></span>
+                <span style="color:#64748b; font-size:0.9em;">剩余: <b id="memory-remain"
+                        style="color:#2563eb">0</b></span>
+                <button onclick="quitMemoryMode()" class="btn-text" style="color:#ef4444; margin-left:15px;">🛑
+                    结束</button>
             </div>
-            <div class="modal-body" style="padding: 20px 0;">
-                <p id="sys-modal-msg" style="color: #64748b; font-size: 1rem; line-height: 1.5;">...</p>
+
+            <div class="memory-card">
+                <div class="card-question">
+                    <div id="memory-q-text">题目加载中...</div>
+                </div>
+
+                <div id="ai-feedback-box" style="display:none; margin: 15px 0; animation: fadeIn 0.3s;">
+                    <div id="ai-feedback-content"></div>
+                </div>
+
+                <div id="memory-answer-area" style="display:none;">
+                    <div class="divider">💡 标准答案</div>
+                    <div id="memory-a-text" class="markdown-body"></div>
+                </div>
             </div>
-            <div class="modal-footer" style="border-top: none; display: flex; gap: 10px; padding-top: 0;">
-                <button id="sys-btn-cancel" class="btn-sidebar btn-gray"
-                    style="flex:1; justify-content:center;">取消</button>
-                <button id="sys-btn-confirm" class="btn-primary" style="flex:1;">确定</button>
+
+            <div class="interaction-area">
+                <textarea id="memory-input" class="main-input" placeholder="输入你的理解，按 Ctrl+Enter 让 AI 判卷..."
+                    rows="3"></textarea>
+
+                <button id="btn-reveal" class="btn-primary" onclick="revealMemoryAnswer()">🔮 AI 判卷
+                    (Ctrl+Enter)</button>
+
+                <div id="btn-grade-group" class="grade-buttons" style="display:none;">
+                    <button onclick="rateMemory('wrong')" class="btn-grade wrong">❌ 没记住 (1)</button>
+                    <button onclick="rateMemory('vague')" class="btn-grade vague">🤔 模糊 (2)</button>
+                    <button onclick="rateMemory('correct')" class="btn-grade correct">✅ 记住了 (Enter)</button>
+                </div>
             </div>
         </div>
     </div>
 
     <div id="toast-container"></div>
 
+    <div id="sys-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 style="margin-top:0">提示</h3>
+            <p id="sys-modal-msg" style="margin: 20px 0; line-height: 1.5; color: #334155;"></p>
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="sys-btn-cancel" class="btn-outline">取消</button>
+                <button id="sys-btn-confirm" class="btn-primary">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3 style="margin-top:0">⚙️ 设置</h3>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display:block; margin-bottom:5px; font-weight:bold;">模型选择</label>
+                <select id="model-select" class="main-input" style="width:100%;">
+                    <option value="Qwen/Qwen2.5-14B-Instruct">Qwen 2.5 14B (硅基流动/极速)</option>
+                    <option value="deepseek-ai/DeepSeek-V3">DeepSeek V3 (硅基流动/深度)</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (Google)</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="display:block; margin-bottom:5px; font-weight:bold;">API Key</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="password" id="api-key-input" class="main-input" placeholder="sk-..." style="flex:1;">
+                    <button onclick="toggleKeyVisibility()" class="btn-outline" style="padding: 0 10px;">👁️</button>
+                </div>
+                <div id="api-key-status" style="display:none; margin-top:5px; font-size:0.9em;"></div>
+            </div>
+
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeSettingsModal()" class="btn-outline">取消</button>
+                <button onclick="saveApiKey()" class="btn-primary">保存配置</button>
+            </div>
+        </div>
+    </div>
+    <div id="mistake-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3 style="margin:0">🔥 错题花名册</h3>
+                <button class="close-btn" onclick="closeMistakeModal()">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <span style="font-size:0.9rem; color:#64748b;" id="mistake-stats-text">共 0 道错题</span>
+                    <div class="btn-group">
+                        <button class="btn-outline btn-small" onclick="toggleSelectMistakes(true)">全选</button>
+                        <button class="btn-outline btn-small" onclick="toggleSelectMistakes(false)">清空</button>
+                    </div>
+                </div>
+
+                <div id="mistake-list" class="mistake-list-container">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <div style="display:flex; justify-content:space-between; width:100%;">
+                    <button class="btn-outline" onclick="deleteSelectedMistakes()"
+                        style="color:#ef4444; border-color:#fecaca;">🗑️ 移除选中</button>
+                    <button class="btn-primary" onclick="launchMistakeReview()">⚔️ 选好了，开刷</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="script.js"></script>
 </body>
 
