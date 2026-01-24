@@ -3,10 +3,12 @@
 ---
 [课程复盘](SUMMARY.md)
 
+*README与总结部分均为本人初稿+gemini润色*
+
 ---
 
 > **浙江大学控制科学与工程学院《人工智能与机器学习》课程智能复习助手**
-> *Powered by Qwen-2.5-14B & SiliconFlow API*
+> *基于gemini与课程PPT完成*
 
 ## 核心功能 (Features)
 
